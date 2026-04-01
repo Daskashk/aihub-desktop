@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Hub Desktop</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-container">
+    <header class="app-header">
+      <h1>🤖 AI Hub Desktop</h1>
+      <div class="header-controls">
+        <button id="updateBtn" class="btn btn-primary">🔄 Actualizar Lista</button>
+        <button id="settingsBtn" class="btn btn-secondary">⚙️ Configuración</button>
+      </div>
+    </header>
+
+    <div id="settingsPanel" class="settings-panel hidden">
+      <div class="settings-content">
+        <h2>Configuración</h2>
+        <div class="setting-item">
+          <label>
+            <input type="checkbox" id="blockingToggle" checked>
+            Bloqueo de dominios activo
+          </label>
+        </div>
+        <div class="setting-item">
+          <label for="maxServices">Máximo de servicios activos:</label>
+          <input type="number" id="maxServices" min="1" max="10" value="3">
+        </div>
+        <div class="setting-item">
+          <p><strong>Última actualización:</strong> <span id="lastUpdate">Nunca</span></p>
+        </div>
+        <div class="setting-actions">
+          <button id="saveSettingsBtn" class="btn btn-primary">Guardar</button>
+          <button id="closeSettingsBtn" class="btn btn-secondary">Cerrar</button>
+        </div>
+      </div>
+    </div>
+
+    <main class="main-content">
+      <section class="services-section">
+        <h2>Servicios Disponibles</h2>
+        <div id="servicesList" class="services-grid">
+          <p class="no-services">Actualiza la lista para ver los servicios disponibles.</p>
+        </div>
+      </section>
+
+      <section class="active-services-section">
+        <h2>Servicios Activos (<span id="activeCount">0</span>/<span id="maxActive">3</span>)</h2>
+        <div id="activeServicesList" class="active-services">
+          <p class="no-active">Ningún servicio activo</p>
+        </div>
+      </section>
+    </main>
+
+    <footer class="status-bar">
+      <div id="statusMessage" class="status-message">Listo</div>
+      <div class="blocking-status">
+        <span id="blockingIndicator" class="indicator active"></span>
+        <span id="blockingText">Bloqueo activo</span>
+      </div>
+    </footer>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>
