@@ -27,7 +27,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // --- State ---
   let config = {};
   let services = [];
-  let activeTabs = []; 
+  let activeTabs = [];
   let currentTabId = null;
 
   // --- Utility Functions ---
@@ -99,12 +99,12 @@ document.addEventListener('DOMContentLoaded', () => {
       <span class="tab-title">${title}</span>
       <button class="btn-close-tab">✕</button>
     `;
-    
+
     // 3. Create Webview
     const webview = document.createElement('webview');
     webview.dataset.id = serviceId;
     webview.style.display = 'flex';
-    
+
     // 4. Add Listeners
     tab.querySelector('.btn-close-tab').addEventListener('click', (e) => {
       e.stopPropagation();
@@ -116,11 +116,11 @@ document.addEventListener('DOMContentLoaded', () => {
     // 5. Append to DOM
     elements.tabsList.appendChild(tab);
     elements.webviewsContainer.appendChild(webview);
-    
+
     // 6. Update State
     activeTabs.push({ id: serviceId, url, title, webview });
     switchToTab(serviceId); // Ensure correct display states
-    
+
     // 7. Load URL (After context is set)
     webview.src = url;
 
@@ -128,7 +128,7 @@ document.addEventListener('DOMContentLoaded', () => {
     webview.addEventListener('did-fail-load', (e) => {
       console.error('Load failed:', e.errorDescription);
       if (e.errorCode !== -3) { // Ignore aborts
-         showStatus(`Error loading: ${e.errorDescription}`, 'error');
+        showStatus(`Error loading: ${e.errorDescription}`, 'error');
       }
     });
 
@@ -140,7 +140,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('.tab-item').forEach(t => {
       t.classList.toggle('active', t.dataset.id === id);
     });
-    
+
     document.querySelectorAll('webview').forEach(wv => {
       wv.style.display = (wv.dataset.id === id) ? 'flex' : 'none';
     });
@@ -176,10 +176,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const renderServicesSidebar = () => {
     elements.servicesList.innerHTML = '';
-    
+
     if (!services || services.length === 0) {
-       elements.servicesList.innerHTML = '<div class="error-message">No services loaded.</div>';
-       return;
+      elements.servicesList.innerHTML = '<div class="error-message">No services loaded.</div>';
+      return;
     }
 
     services.forEach(service => {
@@ -198,7 +198,7 @@ document.addEventListener('DOMContentLoaded', () => {
           <p class="service-privacy">${privacy || ''}</p>
         </div>
       `;
-      
+
       card.addEventListener('click', () => {
         createTab(id, url, name);
         elements.sidebar.classList.add('hidden');
