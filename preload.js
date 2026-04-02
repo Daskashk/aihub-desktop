@@ -1,37 +1,41 @@
-// preload.js - Puente seguro entre frontend y backend
+// preload.js - Secure bridge between frontend and backend
 const { contextBridge, ipcRenderer } = require('electron');
 
-// Exponer funciones seguras al frontend
+// Expose safe functions to the frontend
 contextBridge.exposeInMainWorld('electronAPI', {
-    // Obtener configuración actual
+    // Get current application configuration
     getConfig: () => ipcRenderer.invoke('get-config'),
 
-                                // Actualizar datos remotos
-                                updateRemoteData: () => ipcRenderer.invoke('update-remote-data'),
+    // Update remote services and rules data
+    updateRemoteData: () => ipcRenderer.invoke('update-remote-data'),
 
-                                // Obtener lista de servicios
-                                getServices: () => ipcRenderer.invoke('get-services'),
+    // Set the currently active service for domain blocking context
+    setActiveService: (serviceId) => ipcRenderer.invoke('set-active-service', serviceId),
 
-                                // Obtener reglas de dominios
-                                getRules: () => ipcRenderer.invoke('get-rules'),
+    // Get the list of available AI services
+    getServices: () => ipcRenderer.invoke('get-services'),
 
-                                // Actualizar configuración
-                                updateConfig: (newConfig) => ipcRenderer.invoke('update-config', newConfig),
+    // Get domain filtering rules
+    getRules: () => ipcRenderer.invoke('get-rules'),
 
-                                // Abrir servicio
-                                openService: (serviceId, serviceUrl, serviceName) =>
-                                ipcRenderer.invoke('open-service', serviceId, serviceUrl, serviceName),
+    // Update configuration settings
+    updateConfig: (newConfig) => ipcRenderer.invoke('update-config', newConfig),
 
-                                // Cerrar servicio
-                                closeService: (serviceId) => ipcRenderer.invoke('close-service', serviceId),
+    // Open a service in a new tab
+    openService: (serviceId, serviceUrl, serviceName) =>
+        ipcRenderer.invoke('open-service', serviceId, serviceUrl, serviceName),
 
-                                // Alternar bloqueo
-                                toggleBlocking: (enabled) => ipcRenderer.invoke('toggle-blocking', enabled),
+    // Close an open service tab
+    closeService: (serviceId) => ipcRenderer.invoke('close-service', serviceId),
 
-                                // Escuchar eventos desde el backend
-                                onMaxServicesReached: (callback) =>
-                                ipcRenderer.on('max-services-reached', (event, maxServices) => callback(maxServices)),
+    // Enable/disable domain blocking
+    toggleBlocking: (enabled) => ipcRenderer.invoke('toggle-blocking', enabled),
 
-                                onServiceClosed: (callback) =>
-                                ipcRenderer.on('service-closed', (event, serviceId) => callback(serviceId))
+    // Listen for max services limit reached event
+    onMaxServicesReached: (callback) =>
+        ipcRenderer.on('max-services-reached', (event, maxServices) => callback(maxServices)),
+
+    // Listen for service closed event
+    onServiceClosed: (callback) =>
+        ipcRenderer.on('service-closed', (event, serviceId) => callback(serviceId))
 });
