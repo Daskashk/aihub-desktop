@@ -1,65 +1,103 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'">
   <title>AI Hub Desktop</title>
   <link rel="stylesheet" href="styles.css">
 </head>
-<body>
+<body class="dark-mode">
   <div class="app-container">
+    <!-- Header -->
     <header class="app-header">
-      <h1>🤖 AI Hub Desktop</h1>
-      <div class="header-controls">
-        <button id="updateBtn" class="btn btn-primary">🔄 Actualizar Lista</button>
-        <button id="settingsBtn" class="btn btn-secondary">⚙️ Configuración</button>
+      <div class="header-title">
+        <h1>AI Hub Desktop</h1>
+        <div class="header-controls">
+          <button id="btn-update" class="btn btn-icon" title="Update Services List">
+            <span class="icon">🔄</span>
+          </button>
+          <button id="btn-settings" class="btn btn-icon" title="Settings">
+            <span class="icon">⚙️</span>
+          </button>
+        </div>
+      </div>
+      
+      <!-- Tabs Container -->
+      <div class="tabs-container">
+        <div id="tabs-list" class="tabs-list">
+          <!-- Tabs will be added here dynamically -->
+        </div>
+        <button id="btn-add-tab" class="btn btn-tab-add" title="Add Service">+</button>
       </div>
     </header>
 
-    <div id="settingsPanel" class="settings-panel hidden">
-      <div class="settings-content">
-        <h2>Configuración</h2>
-        <div class="setting-item">
+    <!-- Sidebar (Service List) -->
+    <aside id="sidebar" class="sidebar hidden">
+      <div class="sidebar-header">
+        <h3>Available Services</h3>
+        <button class="btn btn-close-sidebar" id="btn-close-sidebar">✕</button>
+      </div>
+      <div id="services-list" class="services-list">
+        <!-- Services populated here -->
+      </div>
+    </aside>
+
+    <!-- Main Content Area (Webviews) -->
+    <main class="main-content">
+      <div id="welcome-screen" class="welcome-screen">
+        <h2>Welcome to AI Hub Desktop</h2>
+        <p>Click the <strong>+</strong> button to add a service.</p>
+        <p>Use the <strong>Settings</strong> icon to manage memory usage and blocking.</p>
+      </div>
+      <div id="webviews-container">
+        <!-- Webviews will be attached here -->
+      </div>
+    </main>
+
+    <!-- Settings Panel -->
+    <div id="settings-panel" class="settings-panel hidden">
+      <div class="panel-content">
+        <h2>Settings</h2>
+        
+        <div class="setting-group">
           <label>
-            <input type="checkbox" id="blockingToggle" checked>
-            Bloqueo de dominios activo
+            <input type="checkbox" id="toggle-blocking" checked>
+            Enable Domain Blocking
+          </label>
+          <small>Blocks connections to non-whitelisted domains.</small>
+        </div>
+
+        <div class="setting-group">
+          <label for="max-services">Active Services Limit (Memory Manager)</label>
+          <input type="number" id="max-services" min="1" max="10" value="3">
+          <small>Limits RAM usage by restricting concurrent services.</small>
+        </div>
+
+        <div class="setting-group">
+          <label>
+            <input type="checkbox" id="toggle-dark-mode" checked>
+            Dark Mode
           </label>
         </div>
-        <div class="setting-item">
-          <label for="maxServices">Máximo de servicios activos:</label>
-          <input type="number" id="maxServices" min="1" max="10" value="3">
+
+        <div class="setting-group">
+          <p><strong>Last Updated:</strong> <span id="last-update">Never</span></p>
         </div>
-        <div class="setting-item">
-          <p><strong>Última actualización:</strong> <span id="lastUpdate">Nunca</span></p>
-        </div>
+
         <div class="setting-actions">
-          <button id="saveSettingsBtn" class="btn btn-primary">Guardar</button>
-          <button id="closeSettingsBtn" class="btn btn-secondary">Cerrar</button>
+          <button id="btn-save-settings" class="btn btn-primary">Save Changes</button>
+          <button id="btn-close-settings" class="btn btn-secondary">Cancel</button>
         </div>
       </div>
     </div>
 
-    <main class="main-content">
-      <section class="services-section">
-        <h2>Servicios Disponibles</h2>
-        <div id="servicesList" class="services-grid">
-          <p class="no-services">Actualiza la lista para ver los servicios disponibles.</p>
-        </div>
-      </section>
-
-      <section class="active-services-section">
-        <h2>Servicios Activos (<span id="activeCount">0</span>/<span id="maxActive">3</span>)</h2>
-        <div id="activeServicesList" class="active-services">
-          <p class="no-active">Ningún servicio activo</p>
-        </div>
-      </section>
-    </main>
-
+    <!-- Status Bar -->
     <footer class="status-bar">
-      <div id="statusMessage" class="status-message">Listo</div>
+      <div id="status-message" class="status-message">Ready</div>
       <div class="blocking-status">
-        <span id="blockingIndicator" class="indicator active"></span>
-        <span id="blockingText">Bloqueo activo</span>
+        <span id="blocking-indicator" class="indicator active"></span>
+        <span id="blocking-text">Blocking Active</span>
       </div>
     </footer>
   </div>
