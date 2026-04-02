@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Servicio</title>
+  <title>Service</title>
   <style>
     body, html {
       margin: 0;
@@ -24,35 +24,35 @@
   <script>
     const { ipcRenderer } = require('electron');
 
-    // Obtener parámetros de la URL
+    // Get URL parameters
     const urlParams = new URLSearchParams(window.location.search);
     const serviceUrl = urlParams.get('url');
     const serviceName = urlParams.get('name');
     const serviceId = urlParams.get('id');
 
-    // Cargar el servicio
+    // Load the service
     const webview = document.getElementById('serviceWebview');
 
     if (serviceUrl) {
       webview.src = serviceUrl;
     }
 
-    // Manejar eventos del webview
+    // Handle webview events
     webview.addEventListener('did-start-loading', () => {
-      console.log('Cargando servicio...');
+      console.log('Loading service...');
     });
 
     webview.addEventListener('did-finish-load', () => {
-      console.log('Servicio cargado');
+      console.log('Service loaded');
     });
 
     webview.addEventListener('did-fail-load', (event) => {
-      console.error('Error cargando servicio:', event.errorDescription);
+      console.error('Error loading service:', event.errorDescription);
     });
 
-    // Manejar nuevas ventanas (popups)
+    // Handle new windows (popups)
     webview.addEventListener('new-window', (event) => {
-      // Abrir enlaces externos en el navegador por defecto
+      // Open external links in default browser
       require('electron').shell.openExternal(event.url);
     });
   </script>
