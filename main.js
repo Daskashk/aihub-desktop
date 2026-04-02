@@ -1,315 +1,261 @@
-// main.js - Proceso principal de Electron
+// main.js - Main Process (Backend)
 const { app, BrowserWindow, ipcMain, session } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const https = require('https');
 const http = require('http');
 
-// Rutas a archivos locales
+// Paths
 const configPath = path.join(app.getPath('userData'), 'config.json');
 const dataDir = path.join(app.getPath('userData'), 'data');
 const servicesPath = path.join(dataDir, 'remote_services.json');
 const rulesPath = path.join(dataDir, 'remote_rules.json');
 
-// Variables globales
+// Global State
 let mainWindow = null;
-let serviceWindows = new Map(); // Ventanas de cada servicio
-let allowedDomains = new Set(); // Dominios permitidos para el servicio actual
-let currentServiceId = null;    // ID del servicio actualmente activo
-
-// Configuración por defecto
 let config = {
-    lastUpdate: null,
-    blockingEnabled: true,
-    maxActiveServices: 3,
-    activeServices: [],
-    remoteUrls: {
-        services: "https://raw.githubusercontent.com/SilentCoderHere/aihub-config-data/main/ai_services_list.json",
-        rules: "https://raw.githubusercontent.com/SilentCoderHere/aihub-config-data/main/domain_filtering_rules.json"
-    }
+  lastUpdate: null,
+  blockingEnabled: true,
+  maxActiveServices: 3, // Memory Manager setting
+  darkMode: true, // Default dark mode
+  remoteUrls: {
+    services: "https://raw.githubusercontent.com/SilentCoderHere/aihub-config-data/main/ai_services_list.json",
+    rules: "https://raw.githubusercontent.com/SilentCoderHere/aihub-config-data/main/domain_filtering_rules.json"
+  }
 };
 
+// Whitelist for common auth domains (loaded from rules)
+let commonAuthDomains = new Set();
+// Map to track active services (simulated for single window context)
+let activeServices = new Map(); 
+
 // ==========================================
-// GESTIÓN DE CONFIGURACIÓN
+// CONFIGURATION MANAGEMENT
 // ==========================================
 
 function loadConfig() {
-    try {
-        if (fs.existsSync(configPath)) {
-            const data = fs.readFileSync(configPath, 'utf8');
-            config = JSON.parse(data);
-        }
-    } catch (error) {
-        console.error('Error cargando configuración:', error);
+  try {
+    if (fs.existsSync(configPath)) {
+      const data = fs.readFileSync(configPath, 'utf8');
+      config = { ...config, ...JSON.parse(data) };
     }
+    saveConfig(); // Ensure file exists
+  } catch (error) {
+    console.error('Error loading config:', error);
+  }
 }
 
 function saveConfig() {
-    try {
-        fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
-    } catch (error) {
-        console.error('Error guardando configuración:', error);
-    }
+  try {
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+  } catch (error) {
+    console.error('Error saving config:', error);
+  }
 }
 
 // ==========================================
-// DESCARGA DE DATOS REMOTOS
+// DATA MANAGEMENT
 // ==========================================
 
 function downloadFile(url, destPath) {
-    return new Promise((resolve, reject) => {
-        console.log(`Descargando: ${url}`);
-
-        const protocol = url.startsWith('https') ? https : http;
-        const file = fs.createWriteStream(destPath);
-
-        protocol.get(url, (response) => {
-            if (response.statusCode === 301 || response.statusCode === 302) {
-                const redirectUrl = response.headers.location;
-                downloadFile(redirectUrl, destPath).then(resolve).catch(reject);
-                return;
-            }
-
-            if (response.statusCode !== 200) {
-                reject(new Error(`HTTP ${response.statusCode}`));
-                return;
-            }
-
-            response.pipe(file);
-            file.on('finish', () => {
-                file.close();
-                console.log(`Descarga completada: ${destPath}`);
-                resolve();
-            });
-        }).on('error', (err) => {
-            fs.unlink(destPath, () => {});
-            reject(err);
-        });
+  return new Promise((resolve, reject) => {
+    const protocol = url.startsWith('https') ? https : http;
+    const file = fs.createWriteStream(destPath);
+    
+    protocol.get(url, (response) => {
+      // Handle redirects
+      if (response.statusCode === 301 || response.statusCode === 302) {
+        return downloadFile(response.headers.location, destPath).then(resolve).catch(reject);
+      }
+      if (response.statusCode !== 200) return reject(new Error(`HTTP ${response.statusCode}`));
+      
+      response.pipe(file);
+      file.on('finish', () => { file.close(); resolve(); });
+    }).on('error', (err) => {
+      fs.unlink(destPath, () => {});
+      reject(err);
     });
+  });
 }
 
 async function updateRemoteData() {
-    try {
-        if (!fs.existsSync(dataDir)) {
-            fs.mkdirSync(dataDir, { recursive: true });
-        }
+  try {
+    if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+    
+    await downloadFile(config.remoteUrls.services, servicesPath);
+    await downloadFile(config.remoteUrls.rules, rulesPath);
+    
+    config.lastUpdate = new Date().toISOString();
+    saveConfig();
+    
+    // Reload rules to update common auth domains
+    loadRules(); 
+    
+    return { success: true };
+  } catch (error) {
+    console.error('Error updating data:', error);
+    return { success: false, error: error.message };
+  }
+}
 
-        await downloadFile(config.remoteUrls.services, servicesPath);
-        await downloadFile(config.remoteUrls.rules, rulesPath);
-
-        config.lastUpdate = new Date().toISOString();
-        saveConfig();
-        return { success: true };
-    } catch (error) {
-        console.error('Error actualizando datos:', error);
-        return { success: false, error: error.message };
+function loadServices() {
+  try {
+    if (fs.existsSync(servicesPath)) {
+      return JSON.parse(fs.readFileSync(servicesPath, 'utf8'));
     }
+  } catch (error) {
+    console.error('Error loading services:', error);
+  }
+  return null;
+}
+
+function loadRules() {
+  try {
+    if (fs.existsSync(rulesPath)) {
+      const data = JSON.parse(fs.readFileSync(rulesPath, 'utf8'));
+      
+      // Extract common auth domains for the whitelist
+      if (data.common_auth_domains) {
+        commonAuthDomains = new Set(data.common_auth_domains);
+        console.log('Common Auth Domains Loaded:', data.common_auth_domains);
+      }
+      
+      return data;
+    }
+  } catch (error) {
+    console.error('Error loading rules:', error);
+  }
+  return null;
 }
 
 // ==========================================
-// CARGA DE DATOS LOCALES
+// DOMAIN BLOCKING LOGIC
 // ==========================================
 
-function loadServicesData() {
-    try {
-        if (fs.existsSync(servicesPath)) {
-            const data = fs.readFileSync(servicesPath, 'utf8');
-            return JSON.parse(data);
-        }
-    } catch (error) {
-        console.error('Error cargando servicios:', error);
+function isDomainAllowed(hostname, serviceDomains) {
+  // 1. Always allow if blocking is disabled globally
+  if (!config.blockingEnabled) return true;
+
+  // 2. Always allow common auth domains (Critical Fix)
+  for (const domain of commonAuthDomains) {
+    if (hostname === domain || hostname.endsWith('.' + domain)) {
+      return true;
     }
-    return null;
-}
+  }
 
-function loadRulesData() {
-    try {
-        if (fs.existsSync(rulesPath)) {
-            const data = fs.readFileSync(rulesPath, 'utf8');
-            return JSON.parse(data);
-        }
-    } catch (error) {
-        console.error('Error cargando reglas:', error);
+  // 3. Check specific service whitelist
+  if (serviceDomains && serviceDomains.length > 0) {
+    for (const domain of serviceDomains) {
+      if (hostname === domain || hostname.endsWith('.' + domain)) {
+        return true;
+      }
     }
-    return null;
-}
+  }
 
-// ==========================================
-// LÓGICA DE BLOQUEO DE DOMINIOS
-// ==========================================
-
-function updateAllowedDomains(serviceId) {
-    const rulesData = loadRulesData();
-    allowedDomains.clear();
-
-    if (rulesData && rulesData.service_domains && rulesData.service_domains[serviceId]) {
-        rulesData.service_domains[serviceId].forEach(domain => {
-            allowedDomains.add(domain);
-        });
-        console.log(`Dominios permitidos para ${serviceId}:`, Array.from(allowedDomains));
-    } else {
-        console.warn(`No hay dominios permitidos para ${serviceId}`);
-    }
-}
-
-function isDomainAllowed(hostname) {
-    if (!config.blockingEnabled) return true;
-
-    for (const allowed of allowedDomains) {
-        if (hostname === allowed || hostname.endsWith('.' + allowed)) {
-            return true;
-        }
-    }
-    return false;
+  return false;
 }
 
 function setupWebRequestBlocking() {
-    const ses = session.defaultSession;
-
-    ses.webRequest.onBeforeRequest(
-        { urls: ['*://*/*'] },
-        (details, callback) => {
-            try {
-                const url = new URL(details.url);
-                const hostname = url.hostname;
-
-                // Permitir recursos locales de Electron
-                if (details.url.startsWith('devtools://') ||
-                    details.url.startsWith('chrome-extension://') ||
-                    details.url.startsWith('file://')) {
-                    callback({});
-                return;
-                    }
-
-                    // Verificar si el dominio está permitido
-                    if (isDomainAllowed(hostname)) {
-                        callback({}); // Permitir
-                    } else {
-                        console.log(`🚫 Bloqueado: ${hostname}`);
-                        callback({ cancel: true }); // Bloquear
-                    }
-            } catch (e) {
-                callback({}); // Si hay error, permitir por defecto
-            }
+  const ses = session.defaultSession;
+  
+  ses.webRequest.onBeforeRequest(
+    { urls: ['*://*/*'] },
+    (details, callback) => {
+      try {
+        const url = new URL(details.url);
+        const hostname = url.hostname;
+        
+        // Allow local resources
+        if (details.url.startsWith('devtools://') || details.url.startsWith('file://')) {
+          return callback({});
         }
-    );
+
+        // Determine which service this request belongs to
+        // Note: In a single-window tabbed interface, we need to know which tab is making the request.
+        // Since we can't easily filter by tab in onBeforeRequest without webContentsId checks,
+        // we will rely on a simpler approach for now: 
+        // We maintain a global "active service domains" list that updates when the user switches tabs.
+        // (This logic will be connected via IPC from renderer when tabs change)
+        
+        const currentServiceId = config.lastActiveService; // Simplified for now
+        const rules = loadRules();
+        const serviceDomains = rules && rules.service_domains ? rules.service_domains[currentServiceId] : [];
+
+        if (isDomainAllowed(hostname, serviceDomains)) {
+          callback({}); // Allow
+        } else {
+          console.log(`Blocked: ${hostname} (Service: ${currentServiceId})`);
+          callback({ cancel: true }); // Block
+        }
+      } catch (e) {
+        console.error('Error in request blocker:', e);
+        callback({}); // Allow on error to avoid breaking the app
+      }
+    }
+  );
 }
 
 // ==========================================
-// GESTIÓN DE VENTANAS
+// WINDOW MANAGEMENT
 // ==========================================
-
-function createServiceWindow(serviceId, serviceUrl, serviceName) {
-    if (serviceWindows.has(serviceId)) {
-        serviceWindows.get(serviceId).focus();
-        return;
-    }
-
-    if (config.activeServices.length >= config.maxActiveServices) {
-        mainWindow.webContents.send('max-services-reached', config.maxActiveServices);
-        return;
-    }
-
-    const serviceWindow = new BrowserWindow({
-        width: 1200,
-        height: 800,
-        title: `${serviceName} - AI Hub Desktop`,
-        webPreferences: {
-            nodeIntegration: false,
-            contextIsolation: true,
-            webviewTag: true,
-            sandbox: true
-        }
-    });
-
-    // Actualizar dominios permitidos para este servicio
-    currentServiceId = serviceId;
-    updateAllowedDomains(serviceId);
-
-    // Cargar el servicio
-    serviceWindow.loadURL(serviceUrl);
-
-    serviceWindow.on('closed', () => {
-        serviceWindows.delete(serviceId);
-        config.activeServices = config.activeServices.filter(id => id !== serviceId);
-        saveConfig();
-        mainWindow.webContents.send('service-closed', serviceId);
-    });
-
-    serviceWindows.set(serviceId, serviceWindow);
-
-    if (!config.activeServices.includes(serviceId)) {
-        config.activeServices.push(serviceId);
-        saveConfig();
-    }
-}
 
 function createMainWindow() {
-    mainWindow = new BrowserWindow({
-        width: 1000,
-        height: 700,
-        webPreferences: {
-            nodeIntegration: false,
-            contextIsolation: true,
-            preload: path.join(__dirname, 'preload.js')
-        }
-    });
-
-    mainWindow.loadFile(path.join(__dirname, 'ui', 'index.html'));
-
-    mainWindow.on('closed', () => {
-        mainWindow = null;
-    });
+  mainWindow = new BrowserWindow({
+    width: 1200,
+    height: 800,
+    minWidth: 800,
+    minHeight: 600,
+    title: 'AI Hub Desktop',
+    backgroundColor: '#202124', // Dark mode default
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js'),
+      webviewTag: true // Required for tabs
+    }
+  });
+  
+  mainWindow.loadFile(path.join(__dirname, 'ui', 'index.html'));
+  
+  mainWindow.on('closed', () => { mainWindow = null; });
 }
 
 // ==========================================
-// MANEJO DE EVENTOS IPC
+// IPC HANDLERS
 // ==========================================
 
 ipcMain.handle('get-config', () => config);
+ipcMain.handle('get-services', () => loadServices());
+ipcMain.handle('get-rules', () => loadRules());
 ipcMain.handle('update-remote-data', async () => await updateRemoteData());
-ipcMain.handle('get-services', () => loadServicesData());
-ipcMain.handle('get-rules', () => loadRulesData());
 
-ipcMain.handle('update-config', (event, newConfig) => {
-    config = { ...config, ...newConfig };
-    saveConfig();
-    return config;
+ipcMain.handle('save-config', (event, newConfig) => {
+  config = { ...config, ...newConfig };
+  saveConfig();
+  return config;
 });
 
-ipcMain.handle('open-service', (event, serviceId, serviceUrl, serviceName) => {
-    createServiceWindow(serviceId, serviceUrl, serviceName);
-    return true;
-});
-
-ipcMain.handle('close-service', (event, serviceId) => {
-    if (serviceWindows.has(serviceId)) {
-        serviceWindows.get(serviceId).close();
-        return true;
-    }
-    return false;
-});
-
-ipcMain.handle('toggle-blocking', (event, enabled) => {
-    config.blockingEnabled = enabled;
-    saveConfig();
-    return config.blockingEnabled;
+// Handle service activation for blocking context
+ipcMain.on('set-active-service', (event, serviceId) => {
+  config.lastActiveService = serviceId;
+  // Update blocking rules dynamically if needed, though our logic reads from config on each request
 });
 
 // ==========================================
-// INICIALIZACIÓN
+// APP LIFECYCLE
 // ==========================================
 
 app.whenReady().then(() => {
-    loadConfig();
-    setupWebRequestBlocking();
-    createMainWindow();
+  loadConfig();
+  loadRules(); // Load initial rules
+  setupWebRequestBlocking();
+  createMainWindow();
 });
 
 app.on('window-all-closed', () => {
-    if (process.platform !== 'darwin') app.quit();
+  if (process.platform !== 'darwin') app.quit();
 });
 
 app.on('will-quit', () => {
-    session.defaultSession.webRequest.onBeforeRequest(null);
+  session.defaultSession.webRequest.onBeforeRequest(null);
 });
