@@ -15,14 +15,14 @@
         <h1>AI Hub Desktop</h1>
         <div class="header-controls">
           <button id="btn-update" class="btn btn-icon" title="Update Services List">
-            <span class="icon">🔄</span>
+            <span>🔄</span>
           </button>
           <button id="btn-settings" class="btn btn-icon" title="Settings">
-            <span class="icon">⚙️</span>
+            <span>⚙️</span>
           </button>
         </div>
       </div>
-      
+
       <!-- Tabs Container -->
       <div class="tabs-container">
         <div id="tabs-list" class="tabs-list">
@@ -35,7 +35,7 @@
     <!-- Sidebar (Service List) -->
     <aside id="sidebar" class="sidebar hidden">
       <div class="sidebar-header">
-        <h3>Available Services</h3>
+        <h3>Active Services</h3>
         <button class="btn btn-close-sidebar" id="btn-close-sidebar">✕</button>
       </div>
       <div id="services-list" class="services-list">
@@ -43,12 +43,12 @@
       </div>
     </aside>
 
-    <!-- Main Content Area (Webviews) -->
+    <!-- Main Content Area -->
     <main class="main-content">
       <div id="welcome-screen" class="welcome-screen">
         <h2>Welcome to AI Hub Desktop</h2>
         <p>Click the <strong>+</strong> button to add a service.</p>
-        <p>Use the <strong>Settings</strong> icon to manage memory usage and blocking.</p>
+        <p>Configure services in Settings.</p>
       </div>
       <div id="webviews-container">
         <!-- Webviews will be attached here -->
@@ -58,36 +58,61 @@
     <!-- Settings Panel -->
     <div id="settings-panel" class="settings-panel hidden">
       <div class="panel-content">
-        <h2>Settings</h2>
-        
-        <div class="setting-group">
-          <label>
-            <input type="checkbox" id="toggle-blocking" checked>
-            Enable Domain Blocking
-          </label>
-          <small>Blocks connections to non-whitelisted domains.</small>
+        <div class="panel-header">
+          <h2>Settings</h2>
+          <button id="btn-close-settings" class="btn btn-icon">✕</button>
         </div>
 
-        <div class="setting-group">
-          <label for="max-services">Active Services Limit (Memory Manager)</label>
-          <input type="number" id="max-services" min="1" max="10" value="3">
-          <small>Limits RAM usage by restricting concurrent services.</small>
+        <div class="settings-tabs">
+          <button class="settings-tab active" data-tab="general">General</button>
+          <button class="settings-tab" data-tab="services">Services</button>
         </div>
 
-        <div class="setting-group">
-          <label>
-            <input type="checkbox" id="toggle-dark-mode" checked>
-            Dark Mode
-          </label>
-        </div>
+        <div class="settings-content">
+          <!-- General Tab -->
+          <div id="tab-general" class="settings-tab-content active">
+            <div class="setting-group">
+              <label class="setting-label">
+                <input type="checkbox" id="toggle-blocking" checked>
+                <span>Enable Domain Blocking</span>
+              </label>
+              <small class="setting-hint">Blocks connections to non-whitelisted domains.</small>
+            </div>
 
-        <div class="setting-group">
-          <p><strong>Last Updated:</strong> <span id="last-update">Never</span></p>
-        </div>
+            <div class="setting-group">
+              <label class="setting-label" for="max-services">Active Services Limit</label>
+              <input type="number" id="max-services" min="1" max="10" value="3" class="input-field">
+              <small class="setting-hint">Limits RAM usage by restricting concurrent services.</small>
+            </div>
 
-        <div class="setting-actions">
-          <button id="btn-save-settings" class="btn btn-primary">Save Changes</button>
-          <button id="btn-close-settings" class="btn btn-secondary">Cancel</button>
+            <div class="setting-group">
+              <label class="setting-label">
+                <input type="checkbox" id="toggle-dark-mode" checked>
+                <span>Dark Mode</span>
+              </label>
+            </div>
+
+            <div class="setting-group">
+              <div class="info-box">
+                <p><strong>Last Updated:</strong> <span id="last-update">Never</span></p>
+              </div>
+            </div>
+
+            <div class="setting-actions">
+              <button id="btn-save-settings" class="btn btn-primary">Save Changes</button>
+            </div>
+          </div>
+
+          <!-- Services Tab -->
+          <div id="tab-services" class="settings-tab-content">
+            <div class="services-manager">
+              <h3>Manage Services</h3>
+              <p class="hint-text">Enable or disable services to show in your active list.</p>
+              <div id="all-services-list" class="all-services-list">
+                <!-- All services will be listed here -->
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
