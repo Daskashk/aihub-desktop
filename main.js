@@ -11,20 +11,23 @@ const dataDir = path.join(app.getPath('userData'), 'data');
 const servicesPath = path.join(dataDir, 'remote_services.json');
 const rulesPath = path.join(dataDir, 'remote_rules.json');
 
-// Global State
-let config = {
+// Default Configuration
+const defaultConfig = {
   lastUpdate: null,
   blockingEnabled: true,
   maxActiveServices: 3,
   darkMode: true,
-  lastActiveService: null, // Fix for "Service: undefined"
+  enabledServices: ['chatgpt', 'claude', 'gemini'], // Enabled by default
+  lastActiveService: null,
   remoteUrls: {
     services: "https://raw.githubusercontent.com/SilentCoderHere/aihub-config-data/main/ai_services_list.json",
     rules: "https://raw.githubusercontent.com/SilentCoderHere/aihub-config-data/main/domain_filtering_rules.json"
   }
 };
 
+let config = {...defaultConfig};
 let commonAuthDomains = new Set();
+let rulesCache = null;
 
 // ==========================================
 // CONFIGURATION MANAGEMENT
@@ -34,12 +37,20 @@ function loadConfig() {
   try {
     if (fs.existsSync(configPath)) {
       const data = fs.readFileSync(configPath, 'utf8');
-      // Merge with defaults to ensure all keys exist
-      config = { ...config, ...JSON.parse(data) };
+      const savedConfig = JSON.parse(data);
+      // Deep merge with defaults to ensure all keys exist
+      config = {
+        ...defaultConfig,
+        ...savedConfig,
+        // Ensure arrays exist
+        enabledServices: savedConfig.enabledServices || defaultConfig.enabledServices
+      };
     }
-    saveConfig(); // Ensure file exists
+    saveConfig();
+    console.log('Config loaded:', config);
   } catch (error) {
-    console.error('Error loading config, using defaults:', error);
+    console.error('Error loading config:', error);
+    config = {...defaultConfig};
     saveConfig();
   }
 }
@@ -47,22 +58,21 @@ function loadConfig() {
 function saveConfig() {
   try {
     fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+    console.log('Config saved');
   } catch (error) {
     console.error('Error saving config:', error);
   }
 }
 
 // ==========================================
-// DATA MANAGEMENT (Robust Download)
+// DATA MANAGEMENT
 // ==========================================
 
-// Helper to fetch data following redirects
 function fetchUrl(url) {
   return new Promise((resolve, reject) => {
     const protocol = url.startsWith('https') ? https : http;
 
     protocol.get(url, (response) => {
-      // Handle Redirects
       if (response.statusCode === 301 || response.statusCode === 302) {
         if (response.headers.location) {
           return fetchUrl(response.headers.location).then(resolve).catch(reject);
@@ -92,10 +102,13 @@ async function updateRemoteData() {
     const rulesData = await fetchUrl(config.remoteUrls.rules);
     fs.writeFileSync(rulesPath, rulesData);
 
+    // Clear cache
+    rulesCache = null;
+
     config.lastUpdate = new Date().toISOString();
     saveConfig();
 
-    loadRules(); // Reload rules in memory
+    loadRules();
     return { success: true };
   } catch (error) {
     console.error('Error updating data:', error);
@@ -118,13 +131,15 @@ function loadServices() {
 
 function loadRules() {
   try {
+    if (rulesCache) return rulesCache;
+
     if (fs.existsSync(rulesPath)) {
       const data = fs.readFileSync(rulesPath, 'utf8');
       if (!data) return null;
 
       const rules = JSON.parse(data);
+      rulesCache = rules;
 
-      // Update common auth domains
       if (rules.common_auth_domains) {
         commonAuthDomains = new Set(rules.common_auth_domains);
         console.log('Common Auth Domains Updated:', rules.common_auth_domains);
@@ -143,17 +158,16 @@ function loadRules() {
 // ==========================================
 
 function isDomainAllowed(hostname, serviceDomains) {
-  // 1. Always allow if blocking is disabled
   if (!config.blockingEnabled) return true;
 
-  // 2. Always allow common auth domains (Critical for logins)
+  // Always allow common auth domains
   for (const domain of commonAuthDomains) {
     if (hostname === domain || hostname.endsWith('.' + domain)) {
       return true;
     }
   }
 
-  // 3. Check specific service whitelist
+  // Check service whitelist
   if (serviceDomains && serviceDomains.length > 0) {
     for (const domain of serviceDomains) {
       if (hostname === domain || hostname.endsWith('.' + domain)) {
@@ -176,12 +190,13 @@ function setupWebRequestBlocking() {
         const hostname = url.hostname;
 
         // Allow local resources
-        if (details.url.startsWith('devtools://') || details.url.startsWith('file://')) {
+        if (details.url.startsWith('devtools://') ||
+          details.url.startsWith('file://') ||
+          details.url.startsWith('chrome-extension://')) {
           return callback({});
-        }
+          }
 
-        // Determine service context
-        const serviceId = config.lastActiveService;
+          const serviceId = config.lastActiveService;
         let serviceDomains = [];
 
         if (serviceId) {
@@ -210,7 +225,7 @@ function setupWebRequestBlocking() {
 // ==========================================
 
 function createMainWindow() {
-  mainWindow = new BrowserWindow({
+  const mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
     minWidth: 800,
@@ -221,12 +236,15 @@ function createMainWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js'),
-      webviewTag: true
+                                       webviewTag: true,
+                                       sandbox: false
     }
   });
 
   mainWindow.loadFile(path.join(__dirname, 'ui', 'index.html'));
   mainWindow.on('closed', () => { mainWindow = null; });
+
+  return mainWindow;
 }
 
 // ==========================================
@@ -234,25 +252,40 @@ function createMainWindow() {
 // ==========================================
 
 ipcMain.handle('get-config', () => config);
-ipcMain.handle('get-services', () => loadServices());
+
+ipcMain.handle('get-services', () => {
+  const services = loadServices();
+  return services;
+});
+
 ipcMain.handle('get-rules', () => loadRules());
+
 ipcMain.handle('update-remote-data', async () => await updateRemoteData());
 
 ipcMain.handle('save-config', (event, newConfig) => {
+  // Merge with existing config
+  if (newConfig.enabledServices) {
+    config.enabledServices = [...new Set(newConfig.enabledServices)]; // Remove duplicates
+  }
+
   config = { ...config, ...newConfig };
   saveConfig();
   return config;
 });
 
-ipcMain.handle('set-active-service', (event, serviceId) => {
-  config.lastActiveService = serviceId;
-  return true;
+ipcMain.handle('toggle-service', (event, serviceId) => {
+  const index = config.enabledServices.indexOf(serviceId);
+  if (index === -1) {
+    config.enabledServices.push(serviceId);
+  } else {
+    config.enabledServices.splice(index, 1);
+  }
+  saveConfig();
+  return config.enabledServices;
 });
 
-// Fix for race condition: Receive service ID BEFORE webview loads
 ipcMain.on('set-active-service', (event, serviceId) => {
   config.lastActiveService = serviceId;
-  // We don't need to save config to disk here, just update runtime memory
 });
 
 // ==========================================
@@ -268,4 +301,8 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
+});
+
+app.on('will-quit', () => {
+  session.defaultSession.webRequest.onBeforeRequest(null);
 });
