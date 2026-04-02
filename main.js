@@ -1,4 +1,4 @@
-// main.js - Main Process (Backend)
+// main.js - Main Process
 const { app, BrowserWindow, ipcMain, session } = require('electron');
 const path = require('path');
 const fs = require('fs');
@@ -12,22 +12,19 @@ const servicesPath = path.join(dataDir, 'remote_services.json');
 const rulesPath = path.join(dataDir, 'remote_rules.json');
 
 // Global State
-let mainWindow = null;
 let config = {
   lastUpdate: null,
   blockingEnabled: true,
-  maxActiveServices: 3, // Memory Manager setting
-  darkMode: true, // Default dark mode
+  maxActiveServices: 3,
+  darkMode: true,
+  lastActiveService: null, // Fix for "Service: undefined"
   remoteUrls: {
     services: "https://raw.githubusercontent.com/SilentCoderHere/aihub-config-data/main/ai_services_list.json",
     rules: "https://raw.githubusercontent.com/SilentCoderHere/aihub-config-data/main/domain_filtering_rules.json"
   }
 };
 
-// Whitelist for common auth domains (loaded from rules)
 let commonAuthDomains = new Set();
-// Map to track active services (simulated for single window context)
-let activeServices = new Map(); 
 
 // ==========================================
 // CONFIGURATION MANAGEMENT
@@ -37,11 +34,13 @@ function loadConfig() {
   try {
     if (fs.existsSync(configPath)) {
       const data = fs.readFileSync(configPath, 'utf8');
+      // Merge with defaults to ensure all keys exist
       config = { ...config, ...JSON.parse(data) };
     }
     saveConfig(); // Ensure file exists
   } catch (error) {
-    console.error('Error loading config:', error);
+    console.error('Error loading config, using defaults:', error);
+    saveConfig();
   }
 }
 
@@ -54,27 +53,30 @@ function saveConfig() {
 }
 
 // ==========================================
-// DATA MANAGEMENT
+// DATA MANAGEMENT (Robust Download)
 // ==========================================
 
-function downloadFile(url, destPath) {
+// Helper to fetch data following redirects
+function fetchUrl(url) {
   return new Promise((resolve, reject) => {
     const protocol = url.startsWith('https') ? https : http;
-    const file = fs.createWriteStream(destPath);
     
     protocol.get(url, (response) => {
-      // Handle redirects
+      // Handle Redirects
       if (response.statusCode === 301 || response.statusCode === 302) {
-        return downloadFile(response.headers.location, destPath).then(resolve).catch(reject);
+        if (response.headers.location) {
+          return fetchUrl(response.headers.location).then(resolve).catch(reject);
+        }
       }
-      if (response.statusCode !== 200) return reject(new Error(`HTTP ${response.statusCode}`));
       
-      response.pipe(file);
-      file.on('finish', () => { file.close(); resolve(); });
-    }).on('error', (err) => {
-      fs.unlink(destPath, () => {});
-      reject(err);
-    });
+      if (response.statusCode !== 200) {
+        return reject(new Error(`HTTP Status ${response.statusCode}`));
+      }
+
+      let data = '';
+      response.on('data', chunk => data += chunk);
+      response.on('end', () => resolve(data));
+    }).on('error', reject);
   });
 }
 
@@ -82,15 +84,18 @@ async function updateRemoteData() {
   try {
     if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
     
-    await downloadFile(config.remoteUrls.services, servicesPath);
-    await downloadFile(config.remoteUrls.rules, rulesPath);
+    console.log("Downloading services...");
+    const servicesData = await fetchUrl(config.remoteUrls.services);
+    fs.writeFileSync(servicesPath, servicesData);
+    
+    console.log("Downloading rules...");
+    const rulesData = await fetchUrl(config.remoteUrls.rules);
+    fs.writeFileSync(rulesPath, rulesData);
     
     config.lastUpdate = new Date().toISOString();
     saveConfig();
     
-    // Reload rules to update common auth domains
-    loadRules(); 
-    
+    loadRules(); // Reload rules in memory
     return { success: true };
   } catch (error) {
     console.error('Error updating data:', error);
@@ -101,7 +106,9 @@ async function updateRemoteData() {
 function loadServices() {
   try {
     if (fs.existsSync(servicesPath)) {
-      return JSON.parse(fs.readFileSync(servicesPath, 'utf8'));
+      const data = fs.readFileSync(servicesPath, 'utf8');
+      if (!data) return null;
+      return JSON.parse(data);
     }
   } catch (error) {
     console.error('Error loading services:', error);
@@ -112,15 +119,18 @@ function loadServices() {
 function loadRules() {
   try {
     if (fs.existsSync(rulesPath)) {
-      const data = JSON.parse(fs.readFileSync(rulesPath, 'utf8'));
+      const data = fs.readFileSync(rulesPath, 'utf8');
+      if (!data) return null;
       
-      // Extract common auth domains for the whitelist
-      if (data.common_auth_domains) {
-        commonAuthDomains = new Set(data.common_auth_domains);
-        console.log('Common Auth Domains Loaded:', data.common_auth_domains);
+      const rules = JSON.parse(data);
+      
+      // Update common auth domains
+      if (rules.common_auth_domains) {
+        commonAuthDomains = new Set(rules.common_auth_domains);
+        console.log('Common Auth Domains Updated:', rules.common_auth_domains);
       }
       
-      return data;
+      return rules;
     }
   } catch (error) {
     console.error('Error loading rules:', error);
@@ -133,10 +143,10 @@ function loadRules() {
 // ==========================================
 
 function isDomainAllowed(hostname, serviceDomains) {
-  // 1. Always allow if blocking is disabled globally
+  // 1. Always allow if blocking is disabled
   if (!config.blockingEnabled) return true;
 
-  // 2. Always allow common auth domains (Critical Fix)
+  // 2. Always allow common auth domains (Critical for logins)
   for (const domain of commonAuthDomains) {
     if (hostname === domain || hostname.endsWith('.' + domain)) {
       return true;
@@ -170,26 +180,26 @@ function setupWebRequestBlocking() {
           return callback({});
         }
 
-        // Determine which service this request belongs to
-        // Note: In a single-window tabbed interface, we need to know which tab is making the request.
-        // Since we can't easily filter by tab in onBeforeRequest without webContentsId checks,
-        // we will rely on a simpler approach for now: 
-        // We maintain a global "active service domains" list that updates when the user switches tabs.
-        // (This logic will be connected via IPC from renderer when tabs change)
+        // Determine service context
+        const serviceId = config.lastActiveService;
+        let serviceDomains = [];
         
-        const currentServiceId = config.lastActiveService; // Simplified for now
-        const rules = loadRules();
-        const serviceDomains = rules && rules.service_domains ? rules.service_domains[currentServiceId] : [];
+        if (serviceId) {
+           const rules = loadRules();
+           if (rules && rules.service_domains && rules.service_domains[serviceId]) {
+             serviceDomains = rules.service_domains[serviceId];
+           }
+        }
 
         if (isDomainAllowed(hostname, serviceDomains)) {
           callback({}); // Allow
         } else {
-          console.log(`Blocked: ${hostname} (Service: ${currentServiceId})`);
+          console.log(`Blocked: ${hostname} (Service: ${serviceId || 'none'})`);
           callback({ cancel: true }); // Block
         }
       } catch (e) {
-        console.error('Error in request blocker:', e);
-        callback({}); // Allow on error to avoid breaking the app
+        console.error('Error in blocker:', e);
+        callback({}); 
       }
     }
   );
@@ -206,17 +216,16 @@ function createMainWindow() {
     minWidth: 800,
     minHeight: 600,
     title: 'AI Hub Desktop',
-    backgroundColor: '#202124', // Dark mode default
+    backgroundColor: '#202124',
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js'),
-      webviewTag: true // Required for tabs
+      webviewTag: true
     }
   });
   
   mainWindow.loadFile(path.join(__dirname, 'ui', 'index.html'));
-  
   mainWindow.on('closed', () => { mainWindow = null; });
 }
 
@@ -235,10 +244,10 @@ ipcMain.handle('save-config', (event, newConfig) => {
   return config;
 });
 
-// Handle service activation for blocking context
+// Fix for race condition: Receive service ID BEFORE webview loads
 ipcMain.on('set-active-service', (event, serviceId) => {
   config.lastActiveService = serviceId;
-  // Update blocking rules dynamically if needed, though our logic reads from config on each request
+  // We don't need to save config to disk here, just update runtime memory
 });
 
 // ==========================================
@@ -247,15 +256,11 @@ ipcMain.on('set-active-service', (event, serviceId) => {
 
 app.whenReady().then(() => {
   loadConfig();
-  loadRules(); // Load initial rules
+  loadRules(); 
   setupWebRequestBlocking();
   createMainWindow();
 });
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
-});
-
-app.on('will-quit', () => {
-  session.defaultSession.webRequest.onBeforeRequest(null);
 });
