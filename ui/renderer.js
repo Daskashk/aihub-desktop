@@ -27,7 +27,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // --- State ---
   let config = {};
   let services = [];
-  let activeTabs = []; // Stores { id, url, title, webview }
+  let activeTabs = []; 
   let currentTabId = null;
 
   // --- Utility Functions ---
@@ -59,6 +59,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (data && data.ai_services) {
       services = data.ai_services;
       renderServicesSidebar();
+    } else {
+      elements.servicesList.innerHTML = '<div class="error-message">No services found.<br>Click Update.</div>';
     }
   };
 
@@ -80,12 +82,16 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Check if already open
-    if (activeTabs.find(t => t.id === serviceId)) {
+    const existing = activeTabs.find(t => t.id === serviceId);
+    if (existing) {
       switchToTab(serviceId);
       return;
     }
 
-    // Create Tab Button
+    // 1. Notify Main Process FIRST (Fix for race condition)
+    window.electronAPI.setActiveService(serviceId);
+
+    // 2. Create Tab Button
     const tab = document.createElement('div');
     tab.className = 'tab-item active';
     tab.dataset.id = serviceId;
@@ -94,13 +100,12 @@ document.addEventListener('DOMContentLoaded', () => {
       <button class="btn-close-tab">✕</button>
     `;
     
-    // Create Webview
+    // 3. Create Webview
     const webview = document.createElement('webview');
-    webview.src = url;
     webview.dataset.id = serviceId;
     webview.style.display = 'flex';
     
-    // Event Listeners
+    // 4. Add Listeners
     tab.querySelector('.btn-close-tab').addEventListener('click', (e) => {
       e.stopPropagation();
       closeTab(serviceId);
@@ -108,17 +113,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
     tab.addEventListener('click', () => switchToTab(serviceId));
 
-    // Append to DOM
+    // 5. Append to DOM
     elements.tabsList.appendChild(tab);
     elements.webviewsContainer.appendChild(webview);
     
-    // Add to State
+    // 6. Update State
     activeTabs.push({ id: serviceId, url, title, webview });
-    switchToTab(serviceId);
-    elements.welcomeScreen.style.display = 'none';
+    switchToTab(serviceId); // Ensure correct display states
     
-    // Notify main process about active service for blocking context
-    window.electronAPI.setActiveService(serviceId);
+    // 7. Load URL (After context is set)
+    webview.src = url;
+
+    // Handle Loading Errors
+    webview.addEventListener('did-fail-load', (e) => {
+      console.error('Load failed:', e.errorDescription);
+      if (e.errorCode !== -3) { // Ignore aborts
+         showStatus(`Error loading: ${e.errorDescription}`, 'error');
+      }
+    });
+
+    elements.welcomeScreen.style.display = 'none';
   };
 
   const switchToTab = (id) => {
@@ -140,8 +154,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (tabIndex === -1) return;
 
     // Remove from DOM
-    document.querySelector(`.tab-item[data-id="${id}"]`).remove();
-    document.querySelector(`webview[data-id="${id}"]`).remove();
+    const tabEl = document.querySelector(`.tab-item[data-id="${id}"]`);
+    const wvEl = document.querySelector(`webview[data-id="${id}"]`);
+    if (tabEl) tabEl.remove();
+    if (wvEl) wvEl.remove();
 
     // Remove from State
     activeTabs.splice(tabIndex, 1);
@@ -161,6 +177,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const renderServicesSidebar = () => {
     elements.servicesList.innerHTML = '';
     
+    if (!services || services.length === 0) {
+       elements.servicesList.innerHTML = '<div class="error-message">No services loaded.</div>';
+       return;
+    }
+
     services.forEach(service => {
       const [name, url, type, privacy, color] = service;
       const id = name.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/g, '');
