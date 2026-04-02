@@ -60,7 +60,7 @@ function saveConfig() {
 function fetchUrl(url) {
   return new Promise((resolve, reject) => {
     const protocol = url.startsWith('https') ? https : http;
-    
+
     protocol.get(url, (response) => {
       // Handle Redirects
       if (response.statusCode === 301 || response.statusCode === 302) {
@@ -68,7 +68,7 @@ function fetchUrl(url) {
           return fetchUrl(response.headers.location).then(resolve).catch(reject);
         }
       }
-      
+
       if (response.statusCode !== 200) {
         return reject(new Error(`HTTP Status ${response.statusCode}`));
       }
@@ -83,18 +83,18 @@ function fetchUrl(url) {
 async function updateRemoteData() {
   try {
     if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
-    
+
     console.log("Downloading services...");
     const servicesData = await fetchUrl(config.remoteUrls.services);
     fs.writeFileSync(servicesPath, servicesData);
-    
+
     console.log("Downloading rules...");
     const rulesData = await fetchUrl(config.remoteUrls.rules);
     fs.writeFileSync(rulesPath, rulesData);
-    
+
     config.lastUpdate = new Date().toISOString();
     saveConfig();
-    
+
     loadRules(); // Reload rules in memory
     return { success: true };
   } catch (error) {
@@ -121,15 +121,15 @@ function loadRules() {
     if (fs.existsSync(rulesPath)) {
       const data = fs.readFileSync(rulesPath, 'utf8');
       if (!data) return null;
-      
+
       const rules = JSON.parse(data);
-      
+
       // Update common auth domains
       if (rules.common_auth_domains) {
         commonAuthDomains = new Set(rules.common_auth_domains);
         console.log('Common Auth Domains Updated:', rules.common_auth_domains);
       }
-      
+
       return rules;
     }
   } catch (error) {
@@ -167,14 +167,14 @@ function isDomainAllowed(hostname, serviceDomains) {
 
 function setupWebRequestBlocking() {
   const ses = session.defaultSession;
-  
+
   ses.webRequest.onBeforeRequest(
     { urls: ['*://*/*'] },
     (details, callback) => {
       try {
         const url = new URL(details.url);
         const hostname = url.hostname;
-        
+
         // Allow local resources
         if (details.url.startsWith('devtools://') || details.url.startsWith('file://')) {
           return callback({});
@@ -183,12 +183,12 @@ function setupWebRequestBlocking() {
         // Determine service context
         const serviceId = config.lastActiveService;
         let serviceDomains = [];
-        
+
         if (serviceId) {
-           const rules = loadRules();
-           if (rules && rules.service_domains && rules.service_domains[serviceId]) {
-             serviceDomains = rules.service_domains[serviceId];
-           }
+          const rules = loadRules();
+          if (rules && rules.service_domains && rules.service_domains[serviceId]) {
+            serviceDomains = rules.service_domains[serviceId];
+          }
         }
 
         if (isDomainAllowed(hostname, serviceDomains)) {
@@ -199,7 +199,7 @@ function setupWebRequestBlocking() {
         }
       } catch (e) {
         console.error('Error in blocker:', e);
-        callback({}); 
+        callback({});
       }
     }
   );
@@ -224,7 +224,7 @@ function createMainWindow() {
       webviewTag: true
     }
   });
-  
+
   mainWindow.loadFile(path.join(__dirname, 'ui', 'index.html'));
   mainWindow.on('closed', () => { mainWindow = null; });
 }
@@ -244,6 +244,11 @@ ipcMain.handle('save-config', (event, newConfig) => {
   return config;
 });
 
+ipcMain.handle('set-active-service', (event, serviceId) => {
+  config.lastActiveService = serviceId;
+  return true;
+});
+
 // Fix for race condition: Receive service ID BEFORE webview loads
 ipcMain.on('set-active-service', (event, serviceId) => {
   config.lastActiveService = serviceId;
@@ -256,7 +261,7 @@ ipcMain.on('set-active-service', (event, serviceId) => {
 
 app.whenReady().then(() => {
   loadConfig();
-  loadRules(); 
+  loadRules();
   setupWebRequestBlocking();
   createMainWindow();
 });
