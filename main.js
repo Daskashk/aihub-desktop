@@ -1,5 +1,5 @@
 // main.js - Main Process
-const { app, BrowserWindow, ipcMain, session, webContents } = require('electron');
+const { app, BrowserWindow, ipcMain, session } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const https = require('https');
@@ -29,7 +29,6 @@ let config = {...defaultConfig};
 let commonAuthDomains = new Set();
 let rulesCache = null;
 const initializedSessions = new Set();
-let servicesCache = null; // Cache services for URL lookup
 
 // ==========================================
 // CONFIGURATION MANAGEMENT
@@ -85,26 +84,24 @@ function fetchUrl(url) {
 async function updateRemoteData() {
   try {
     if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
-    
+
     console.log("[Update] Downloading services...");
     const servicesData = await fetchUrl(config.remoteUrls.services);
     fs.writeFileSync(servicesPath, servicesData);
-    
+
     console.log("[Update] Downloading rules...");
     const rulesData = await fetchUrl(config.remoteUrls.rules);
     fs.writeFileSync(rulesPath, rulesData);
 
     rulesCache = null;
-    servicesCache = null;
     config.lastUpdate = new Date().toISOString();
     saveConfig();
 
     loadRules();
-    loadServicesForUrlLookup();
-    
+
     // Re-setup all sessions with new rules
     initializedSessions.clear();
-    
+
     console.log("[Update] Completed successfully");
     return { success: true };
   } catch (error) {
@@ -126,21 +123,6 @@ function loadServices() {
   return null;
 }
 
-// Cache services for URL-to-serviceId mapping
-function loadServicesForUrlLookup() {
-  try {
-    if (servicesCache) return servicesCache;
-    const data = loadServices();
-    if (data && data.ai_services) {
-      servicesCache = data.ai_services;
-    }
-    return servicesCache;
-  } catch (error) {
-    console.error('[Services] Error in URL lookup:', error);
-    return null;
-  }
-}
-
 function loadRules() {
   try {
     if (rulesCache) return rulesCache;
@@ -149,6 +131,7 @@ function loadRules() {
       if (!data) return null;
       const rules = JSON.parse(data);
       rulesCache = rules;
+
       if (rules.common_auth_domains) {
         commonAuthDomains = new Set(rules.common_auth_domains);
         console.log(`[Rules] Loaded ${commonAuthDomains.size} common auth domains`);
@@ -166,28 +149,10 @@ function loadRules() {
 }
 
 // ==========================================
-// DOMAIN BLOCKING LOGIC (IMPROVED)
+// DOMAIN BLOCKING LOGIC (STRICT - MATCHES JSON KEYS EXACTLY)
 // ==========================================
 
-function getServiceUrlHostname(serviceId) {
-  // Try to find the service's main URL to extract its hostname
-  const services = loadServicesForUrlLookup();
-  if (services) {
-    const service = services.find(s => {
-      const id = s[0].toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/g, '');
-      return id === serviceId;
-    });
-    if (service && service[1]) {
-      try {
-        const url = new URL(service[1]);
-        return url.hostname;
-      } catch (e) {}
-    }
-  }
-  return null;
-}
-
-function isDomainAllowed(hostname, serviceDomains, serviceMainHostname) {
+function isDomainAllowed(hostname, serviceDomains) {
   if (!config.blockingEnabled) return true;
 
   // Always allow common auth domains
@@ -195,18 +160,14 @@ function isDomainAllowed(hostname, serviceDomains, serviceMainHostname) {
     if (hostname === domain || hostname.endsWith('.' + domain)) return true;
   }
 
-  // Always allow the service's main hostname and its subdomains
-  if (serviceMainHostname) {
-    if (hostname === serviceMainHostname || hostname.endsWith('.' + serviceMainHostname)) return true;
-  }
-
-  // Check service whitelist
+  // Check service-specific whitelist
   if (serviceDomains && serviceDomains.length > 0) {
     for (const domain of serviceDomains) {
       if (hostname === domain || hostname.endsWith('.' + domain)) return true;
     }
   }
 
+  // If blocking is on, and it's not in the lists -> BLOCK
   return false;
 }
 
@@ -214,12 +175,9 @@ function setupSessionBlocking(serviceId) {
   if (!serviceId) return;
   const partitionName = `persist:${serviceId}`;
   if (initializedSessions.has(partitionName)) return;
-  
+
   const ses = session.fromPartition(partitionName);
   initializedSessions.add(partitionName);
-
-  // Get the service's main hostname for fallback allowance
-  const serviceMainHostname = getServiceUrlHostname(serviceId);
 
   ses.webRequest.onBeforeRequest({ urls: ['*://*/*'] }, (details, callback) => {
     try {
@@ -233,19 +191,19 @@ function setupSessionBlocking(serviceId) {
 
       const rules = loadRules();
       let serviceDomains = [];
-      
+
+      // EXACT MATCH: The serviceId must exactly match the key in the JSON rules
       if (rules && rules.service_domains && rules.service_domains[serviceId]) {
         serviceDomains = rules.service_domains[serviceId];
       }
 
-      // If blocking is enabled but NO rules exist at all, allow everything
-      // (Prevents total breakage on first run before downloading rules)
+      // SAFEGUARD: If blocking is enabled but NO rules exist at all, allow everything
       if (config.blockingEnabled && !rules) {
         console.warn(`[Blocker] No rules loaded for ${serviceId}, allowing all requests. Run Update first!`);
         return callback({});
       }
 
-      if (isDomainAllowed(hostname, serviceDomains, serviceMainHostname)) {
+      if (isDomainAllowed(hostname, serviceDomains)) {
         callback({}); // Allow
       } else {
         console.log(`[Blocker] Blocked: ${hostname} (Service: ${serviceId})`);
@@ -257,7 +215,7 @@ function setupSessionBlocking(serviceId) {
     }
   });
 
-  console.log(`[Blocker] Session setup for: ${partitionName} (Main domain: ${serviceMainHostname || 'unknown'})`);
+  console.log(`[Blocker] Session setup for: ${partitionName}`);
 }
 
 // ==========================================
@@ -283,6 +241,14 @@ function createMainWindow() {
   });
 
   mainWindow.loadFile(path.join(__dirname, 'ui', 'index.html'));
+
+  // Open DevTools with F12
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    if (input.key === 'F12') {
+      mainWindow.webContents.toggleDevTools();
+    }
+  });
+
   mainWindow.on('closed', () => { mainWindow = null; });
   return mainWindow;
 }
@@ -321,16 +287,6 @@ ipcMain.on('set-active-service', (event, serviceId) => {
   setupSessionBlocking(serviceId);
 });
 
-// Open DevTools for a specific webview
-ipcMain.handle('open-devtools', (event, webContentsId) => {
-  const wc = webContents.fromId(webContentsId);
-  if (wc) {
-    wc.openDevTools();
-    return true;
-  }
-  return false;
-});
-
 // ==========================================
 // APP LIFECYCLE
 // ==========================================
@@ -338,7 +294,6 @@ ipcMain.handle('open-devtools', (event, webContentsId) => {
 app.whenReady().then(() => {
   loadConfig();
   loadRules();
-  loadServicesForUrlLookup();
   createMainWindow();
 });
 

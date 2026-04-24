@@ -2,33 +2,33 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- DOM Elements ---
     const elements = {
         sidebar: document.getElementById('sidebar'),
-        toggleSidebarBtn: document.getElementById('btn-toggle-sidebar'),
-        servicesList: document.getElementById('services-list'),
-        allServicesList: document.getElementById('all-services-list'),
-        webviewsContainer: document.getElementById('webviews-container'),
-        welcomeScreen: document.getElementById('welcome-screen'),
-        settingsPanel: document.getElementById('settings-panel'),
-        btnSettings: document.getElementById('btn-settings'),
-        btnUpdate: document.getElementById('btn-update'),
-        toggleBlocking: document.getElementById('toggle-blocking'),
-        maxServicesInput: document.getElementById('max-services'),
-        toggleDarkMode: document.getElementById('toggle-dark-mode'),
-        lastUpdate: document.getElementById('last-update'),
-        btnSaveSettings: document.getElementById('btn-save-settings'),
-        btnCloseSettings: document.getElementById('btn-close-settings'),
-        statusMessage: document.getElementById('status-message'),
-        blockingIndicator: document.getElementById('blocking-indicator'),
-        blockingText: document.getElementById('blocking-text'),
-        modalTabs: document.querySelectorAll('.modal-tab'),
-        tabContents: document.querySelectorAll('.tab-content'),
-        btnZoomIn: document.getElementById('btn-zoom-in'),
-        btnZoomOut: document.getElementById('btn-zoom-out')
+                          toggleSidebarBtn: document.getElementById('btn-toggle-sidebar'),
+                          servicesList: document.getElementById('services-list'),
+                          allServicesList: document.getElementById('all-services-list'),
+                          webviewsContainer: document.getElementById('webviews-container'),
+                          welcomeScreen: document.getElementById('welcome-screen'),
+                          settingsPanel: document.getElementById('settings-panel'),
+                          btnSettings: document.getElementById('btn-settings'),
+                          btnUpdate: document.getElementById('btn-update'),
+                          toggleBlocking: document.getElementById('toggle-blocking'),
+                          maxServicesInput: document.getElementById('max-services'),
+                          toggleDarkMode: document.getElementById('toggle-dark-mode'),
+                          lastUpdate: document.getElementById('last-update'),
+                          btnSaveSettings: document.getElementById('btn-save-settings'),
+                          btnCloseSettings: document.getElementById('btn-close-settings'),
+                          statusMessage: document.getElementById('status-message'),
+                          blockingIndicator: document.getElementById('blocking-indicator'),
+                          blockingText: document.getElementById('blocking-text'),
+                          modalTabs: document.querySelectorAll('.modal-tab'),
+                          tabContents: document.querySelectorAll('.tab-content'),
+                          btnZoomIn: document.getElementById('btn-zoom-in'),
+                          btnZoomOut: document.getElementById('btn-zoom-out')
     };
 
     // --- State ---
     let config = { enabledServices: [], blockingEnabled: true, maxActiveServices: 3, darkMode: true, lastUpdate: null };
     let allServices = [];
-    let activeTabs = []; 
+    let activeTabs = [];
     let currentTabId = null;
 
     // --- Utilities ---
@@ -72,7 +72,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Rendering: Sidebar ---
     const renderSidebarServices = () => {
         elements.servicesList.innerHTML = '';
-        const enabledServices = allServices.filter(s => config.enabledServices.includes(generateId(s[0])));
+        const enabledServices = allServices.filter(s => {
+            const id = s[5] || generateId(s[0]); // Support explicit ID
+            return config.enabledServices.includes(id);
+        });
 
         if (enabledServices.length === 0) {
             elements.servicesList.innerHTML = `<div style="padding: 16px; text-align: center; color: var(--text-secondary); font-size: 11px;">No active services.<br>Go to Settings.</div>`;
@@ -80,31 +83,31 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         enabledServices.forEach(service => {
-            const [name, url, type, privacy, color] = service;
-            const id = generateId(name);
+            const [name, url, type, privacy, color, explicitId] = service;
+            const id = explicitId || generateId(name); // Support explicit ID
             const bgColor = color ? `#${color}` : '#4285f4';
             const isActive = id === currentTabId;
             const isOpen = activeTabs.some(t => t.id === id);
 
             const item = document.createElement('div');
             item.className = `service-launcher ${isActive ? 'active' : ''}`;
-            
+
             let actionsHtml = '';
             if (isOpen) {
                 actionsHtml = `
-                    <div class="launcher-actions">
-                        <button class="btn-xs btn-reload" title="Reload">↻</button>
-                        <button class="btn-xs btn-close" title="Close">✕</button>
-                    </div>
+                <div class="launcher-actions">
+                <button class="btn-xs btn-reload" title="Reload">↻</button>
+                <button class="btn-xs btn-close" title="Close">✕</button>
+                </div>
                 `;
             }
 
             item.innerHTML = `
-                <div class="launcher-info">
-                    <div class="service-dot" style="background-color: ${bgColor}"></div>
-                    <div class="service-name">${name}</div>
-                </div>
-                ${actionsHtml}
+            <div class="launcher-info">
+            <div class="service-dot" style="background-color: ${bgColor}"></div>
+            <div class="service-name">${name}</div>
+            </div>
+            ${actionsHtml}
             `;
 
             item.addEventListener('click', (e) => {
@@ -129,16 +132,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const renderSettingsServices = () => {
         elements.allServicesList.innerHTML = '';
         allServices.forEach(service => {
-            const [name, url, type, privacy, color] = service;
-            const id = generateId(name);
+            const [name, url, type, privacy, color, explicitId] = service;
+            const id = explicitId || generateId(name); // Support explicit ID
             const bgColor = color ? `#${color}` : '#4285f4';
             const isEnabled = config.enabledServices.includes(id);
 
             const item = document.createElement('div');
             item.className = 'service-setting-item';
             item.innerHTML = `
-                <div class="service-info"><div class="service-dot" style="background-color: ${bgColor}"></div><div class="service-info-name">${name}</div></div>
-                <label class="toggle-switch"><input type="checkbox" ${isEnabled ? 'checked' : ''} data-service-id="${id}"><span class="toggle-slider"></span></label>
+            <div class="service-info"><div class="service-dot" style="background-color: ${bgColor}"></div><div class="service-info-name">${name}</div></div>
+            <label class="toggle-switch"><input type="checkbox" ${isEnabled ? 'checked' : ''} data-service-id="${id}"><span class="toggle-slider"></span></label>
             `;
             item.querySelector('input').addEventListener('change', async (e) => {
                 const serviceId = e.target.dataset.serviceId;
@@ -163,46 +166,18 @@ document.addEventListener('DOMContentLoaded', () => {
         webview.dataset.id = serviceId;
         webview.src = url;
         webview.partition = `persist:${serviceId}`;
-        webview.webpreferences = { 
-            sandbox: true, 
-            contextIsolation: true, 
-            nodeIntegration: false, 
+        webview.webpreferences = {
+            sandbox: true,
+            contextIsolation: true,
+            nodeIntegration: false,
             webSecurity: true,
             allowPopups: true
         };
         webview.style.display = 'none';
-        webview.useragent = webview.useragent || ''; // Will use default
-
-        // DevTools: Right-click to inspect
-        webview.addEventListener('context-menu', (e) => {
-            e.preventDefault();
-            if (webview.getWebContentsId) {
-                const wcId = webview.getWebContentsId();
-                if (wcId) {
-                    window.electronAPI.openDevTools(wcId);
-                }
-            }
-        });
-
-        // Debug: Log loading events
-        webview.addEventListener('did-start-loading', () => {
-            console.log(`[Webview] ${title}: Loading started...`);
-        });
-        
-        webview.addEventListener('did-finish-load', () => {
-            console.log(`[Webview] ${title}: Load finished`);
-        });
-
-        webview.addEventListener('did-fail-load', (e) => {
-            console.error(`[Webview] ${title}: Load failed - ${e.errorDescription} (Code: ${e.errorCode})`);
-            if (e.errorCode !== -3) { // -3 is often a benign cancellation
-                showStatus(`Failed to load ${title}: ${e.errorDescription}`, 'error');
-            }
-        });
 
         elements.webviewsContainer.appendChild(webview);
         activeTabs.push({ id: serviceId, url, title, webview, zoomLevel: 0 });
-        
+
         switchToTab(serviceId);
         window.electronAPI.setActiveService(serviceId);
         renderSidebarServices();
@@ -257,62 +232,62 @@ document.addEventListener('DOMContentLoaded', () => {
         if (tab) applyZoom(currentTabId, Math.min(tab.zoomLevel + 0.5, 5));
     };
 
-    const zoomOut = () => {
-        if (!currentTabId) return;
-        const tab = activeTabs.find(t => t.id === currentTabId);
-        if (tab) applyZoom(currentTabId, Math.max(tab.zoomLevel - 0.5, -5));
-    };
+        const zoomOut = () => {
+            if (!currentTabId) return;
+            const tab = activeTabs.find(t => t.id === currentTabId);
+            if (tab) applyZoom(currentTabId, Math.max(tab.zoomLevel - 0.5, -5));
+        };
 
-    // --- Settings Management ---
-    const saveSettings = async () => {
-        const newConfig = { blockingEnabled: elements.toggleBlocking.checked, maxActiveServices: parseInt(elements.maxServicesInput.value) || 3, darkMode: elements.toggleDarkMode.checked };
-        try {
-            config = await window.electronAPI.saveConfig(newConfig);
-            showStatus('Settings saved', 'success');
-            updateBlockingUI(config.blockingEnabled);
-            applyDarkMode(config.darkMode);
-            elements.settingsPanel.classList.add('hidden');
-        } catch (error) { showStatus('Error saving settings', 'error'); }
-    };
+            // --- Settings Management ---
+            const saveSettings = async () => {
+                const newConfig = { blockingEnabled: elements.toggleBlocking.checked, maxActiveServices: parseInt(elements.maxServicesInput.value) || 3, darkMode: elements.toggleDarkMode.checked };
+                try {
+                    config = await window.electronAPI.saveConfig(newConfig);
+                    showStatus('Settings saved', 'success');
+                    updateBlockingUI(config.blockingEnabled);
+                    applyDarkMode(config.darkMode);
+                    elements.settingsPanel.classList.add('hidden');
+                } catch (error) { showStatus('Error saving settings', 'error'); }
+            };
 
-    // --- Event Listeners ---
-    elements.toggleSidebarBtn.addEventListener('click', () => elements.sidebar.classList.toggle('hidden'));
-    elements.btnSettings.addEventListener('click', () => { renderSettingsServices(); elements.settingsPanel.classList.remove('hidden'); });
-    elements.btnCloseSettings.addEventListener('click', () => elements.settingsPanel.classList.add('hidden'));
-    elements.btnSaveSettings.addEventListener('click', saveSettings);
+            // --- Event Listeners ---
+            elements.toggleSidebarBtn.addEventListener('click', () => elements.sidebar.classList.toggle('hidden'));
+            elements.btnSettings.addEventListener('click', () => { renderSettingsServices(); elements.settingsPanel.classList.remove('hidden'); });
+            elements.btnCloseSettings.addEventListener('click', () => elements.settingsPanel.classList.add('hidden'));
+            elements.btnSaveSettings.addEventListener('click', saveSettings);
 
-    elements.btnZoomIn.addEventListener('click', zoomIn);
-    elements.btnZoomOut.addEventListener('click', zoomOut);
+            elements.btnZoomIn.addEventListener('click', zoomIn);
+            elements.btnZoomOut.addEventListener('click', zoomOut);
 
-    elements.btnUpdate.addEventListener('click', async () => {
-        showStatus('Updating services...', 'info');
-        try {
-            const result = await window.electronAPI.updateRemoteData();
-            if (result.success) {
-                await loadServices();
-                config.lastUpdate = new Date().toISOString();
-                elements.lastUpdate.textContent = formatDate(config.lastUpdate);
-                showStatus('Update successful', 'success');
-            } else { showStatus('Update failed: ' + result.error, 'error'); }
-        } catch (error) { showStatus('Update failed', 'error'); }
-    });
+            elements.btnUpdate.addEventListener('click', async () => {
+                showStatus('Updating services...', 'info');
+                try {
+                    const result = await window.electronAPI.updateRemoteData();
+                    if (result.success) {
+                        await loadServices();
+                        config.lastUpdate = new Date().toISOString();
+                        elements.lastUpdate.textContent = formatDate(config.lastUpdate);
+                        showStatus('Update successful', 'success');
+                    } else { showStatus('Update failed: ' + result.error, 'error'); }
+                } catch (error) { showStatus('Update failed', 'error'); }
+            });
 
-    elements.modalTabs.forEach(tab => {
-        tab.addEventListener('click', (e) => {
-            elements.modalTabs.forEach(t => t.classList.remove('active'));
-            elements.tabContents.forEach(c => c.classList.remove('active'));
-            e.target.classList.add('active');
-            document.getElementById(`tab-${e.target.dataset.tab}`).classList.add('active');
-        });
-    });
+            elements.modalTabs.forEach(tab => {
+                tab.addEventListener('click', (e) => {
+                    elements.modalTabs.forEach(t => t.classList.remove('active'));
+                    elements.tabContents.forEach(c => c.classList.remove('active'));
+                    e.target.classList.add('active');
+                    document.getElementById(`tab-${e.target.dataset.tab}`).classList.add('active');
+                });
+            });
 
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') elements.settingsPanel.classList.add('hidden');
-        if (e.ctrlKey && e.key === '=') { e.preventDefault(); zoomIn(); }
-        if (e.ctrlKey && e.key === '-') { e.preventDefault(); zoomOut(); }
-    });
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') elements.settingsPanel.classList.add('hidden');
+                if (e.ctrlKey && e.key === '=') { e.preventDefault(); zoomIn(); }
+                if (e.ctrlKey && e.key === '-') { e.preventDefault(); zoomOut(); }
+            });
 
-    // --- Initialization ---
-    const init = async () => { await loadConfig(); await loadServices(); };
-    init();
+            // --- Initialization ---
+            const init = async () => { await loadConfig(); await loadServices(); };
+            init();
 });
