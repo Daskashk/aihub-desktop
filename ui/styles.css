@@ -36,35 +36,27 @@ body {
     display: flex; align-items: center; justify-content: space-between;
     background-color: var(--bg-secondary);
     border-bottom: 1px solid var(--border-color);
-    height: 40px; /* Reduced from typical 50-60px */
-    padding: 0 8px;
-    flex-shrink: 0;
-    -webkit-app-region: drag; /* Drag window */
+    height: 40px; padding: 0 8px; flex-shrink: 0;
+    -webkit-app-region: drag;
 }
 
 .app-header h1 {
-    font-size: 12px; font-weight: 600;
-    letter-spacing: 0.5px; color: var(--text-secondary);
-    text-transform: uppercase; margin: 0 12px;
-    pointer-events: none;
+    font-size: 12px; font-weight: 600; letter-spacing: 0.5px;
+    color: var(--text-secondary); text-transform: uppercase; margin: 0 12px;
 }
 
 .header-controls { display: flex; gap: 2px; -webkit-app-region: no-drag; }
 
-/* Buttons & Icons */
 .btn { background: none; border: none; cursor: pointer; font-family: inherit; }
-
 .btn-icon {
     color: var(--text-secondary); display: flex; align-items: center;
     justify-content: center; width: 32px; height: 32px;
     border-radius: var(--radius-sm); transition: background-color 0.1s, color 0.1s;
 }
 .btn-icon:hover { background-color: var(--bg-hover); color: var(--text-primary); }
-
 .btn-primary {
     background-color: var(--accent-color); color: #111; font-weight: 500;
-    padding: 8px 16px; border-radius: var(--radius-sm); transition: background-color 0.1s;
-    width: 100%; margin-top: var(--spacing-sm);
+    padding: 8px 16px; border-radius: var(--radius-sm); width: 100%; margin-top: var(--spacing-sm);
 }
 .btn-primary:hover { background-color: var(--accent-hover); }
 
@@ -90,7 +82,7 @@ body {
 .service-launcher {
     display: flex; align-items: center; justify-content: space-between;
     padding: 8px 8px; border-radius: var(--radius-sm); cursor: pointer;
-    transition: background-color 0.1s; margin-bottom: 2px; position: relative;
+    transition: background-color 0.1s; margin-bottom: 2px;
 }
 .service-launcher:hover { background-color: var(--bg-hover); }
 .service-launcher.active { background-color: var(--bg-tertiary); border-left: 2px solid var(--accent-color); padding-left: 6px; }
@@ -102,58 +94,52 @@ body {
 .service-name { font-size: 12px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .launcher-actions {
-    display: flex; gap: 2px; 
-    visibility: hidden;
-    opacity: 0; 
-    transition: opacity 0.2s, visibility 0.2s;
-.service-launcher:hover .launcher-actions { 
-    visibility: visible;
-    opacity: 1; 
+    display: flex; gap: 2px; visibility: hidden; opacity: 0; transition: opacity 0.2s;
 }
+.service-launcher:hover .launcher-actions { visibility: visible; opacity: 1; }
 
-.btn-icon-xs {
+.btn-xs {
     background: none; border: none; color: var(--text-secondary); cursor: pointer;
     width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;
     border-radius: 50%; font-size: 12px;
 }
-.btn-icon-xs:hover { background-color: rgba(255,255,255,0.1); color: var(--text-primary); }
+.btn-xs:hover { background-color: rgba(255,255,255,0.1); color: var(--text-primary); }
 
 /* --- CONTENT WRAPPER --- */
-.content-wrapper { flex: 1; position: relative; background-color: var(--bg-primary); }
-
+.content-wrapper
+{ flex: 1; position: relative; background-color: var(--bg-primary); }
 .welcome-screen {
-    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    color: var(--text-secondary); text-align: center; padding: var(--spacing-md);
+position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+display: flex; flex-direction: column; align-items: center; justify-content: center;
+color: var(--text-secondary); text-align: center; padding: var(--spacing-md);
 }
 .welcome-screen h2 { margin-bottom: var(--spacing-sm); font-weight: 500; color: var(--text-primary); }
-
 webview { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
 
 /* --- SETTINGS MODAL --- */
 .settings-modal {
-    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-    background-color: rgba(0, 0, 0, 0.6); display: flex;
-    align-items: center; justify-content: center; z-index: 1000;
-    opacity: 1; transition: opacity 0.2s;
+position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+background-color: rgba(0, 0, 0, 0.6); display: flex;
+align-items: center; justify-content: center; z-index: 1000;
+opacity: 1; transition: opacity 0.2s;
 }
 .settings-modal.hidden { opacity: 0; pointer-events: none; }
 
 .modal-content {
-    background-color: var(--bg-secondary); border-radius: var(--radius-md);
-    width: 450px; max-height: 80vh; display: flex; flex-direction: column;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.4); border: 1px solid var(--border-color);
+background-color: var(--bg-secondary); border-radius: var(--radius-md);
+width: 450px; max-height: 80vh; display: flex; flex-direction: column;
+box-shadow: 0 8px 32px rgba(0,0,0,0.4); border: 1px solid var(--border-color);
 }
 .modal-header {
-    display: flex; justify-content: space-between; align-items: center;
-    padding: var(--spacing-md); border-bottom: 1px solid var(--border-color);
+display: flex; justify-content: space-between; align-items: center;
+padding: var(--spacing-md); border-bottom: 1px solid var(--border-color);
 }
 .modal-header h2 { font-size: 16px; font-weight: 500; }
 
 .modal-tabs { display: flex; border-bottom: 1px solid var(--border-color); padding: 0 var(--spacing-md); }
 .modal-tab {
-    padding: 12px 16px; font-size: 13px; font-weight: 500; color: var(--text-secondary);
-    cursor: pointer; border-bottom: 2px solid transparent; background: none; border-top: none; border-left: none; border-right: none;
+padding: 12px 16px; font-size: 13px; font-weight: 500; color: var(--text-secondary);
+cursor: pointer; border-bottom: 2px solid transparent; background: none; border-top: none; border-left: none; border-right: none;
 }
 .modal-tab.active { color: var(--accent-color); border-bottom-color: var(--accent-color); }
 .modal-tab:hover:not(.active) { color: var(--text-primary); }
@@ -181,9 +167,9 @@ input:checked + .toggle-slider:before { transform: translateX(12px); background-
 
 /* --- STATUS BAR --- */
 .status-bar {
-    border-top: 1px solid var(--border-color); padding: 0 var(--spacing-md);
-    height: 22px; display: flex; justify-content: space-between; align-items: center;
-    font-size: 10px; color: var(--text-secondary); background-color: var(--bg-secondary); flex-shrink: 0;
+border-top: 1px solid var(--border-color); padding: 0 var(--spacing-md);
+height: 22px; display: flex; justify-content: space-between; align-items: center;
+font-size: 10px; color: var(--text-secondary); background-color: var(--bg-secondary); flex-shrink: 0;
 }
 .blocking-status { display: flex; align-items: center; gap: 6px; }
 .indicator { width: 6px; height: 6px; border-radius: 50%; background-color: var(--text-secondary); }
