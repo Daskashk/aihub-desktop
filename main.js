@@ -17,7 +17,7 @@ const defaultConfig = {
   blockingEnabled: true,
   maxActiveServices: 3,
   darkMode: true,
-  enabledServices: ['chatgpt', 'claude', 'gemini'], // Enabled by default
+  enabledServices: ['chatgpt', 'claude', 'gemini'],
   lastActiveService: null,
   remoteUrls: {
     services: "https://raw.githubusercontent.com/SilentCoderHere/aihub-config-data/main/ai_services_list.json",
@@ -28,8 +28,6 @@ const defaultConfig = {
 let config = {...defaultConfig};
 let commonAuthDomains = new Set();
 let rulesCache = null;
-
-// Set to keep track of sessions that already have blockers installed
 const initializedSessions = new Set();
 
 // ==========================================
@@ -48,7 +46,6 @@ function loadConfig() {
       };
     }
     saveConfig();
-    console.log('Config loaded');
   } catch (error) {
     console.error('Error loading config:', error);
     config = {...defaultConfig};
@@ -86,24 +83,15 @@ function fetchUrl(url) {
 async function updateRemoteData() {
   try {
     if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
-
-    console.log("Downloading services...");
     const servicesData = await fetchUrl(config.remoteUrls.services);
     fs.writeFileSync(servicesPath, servicesData);
-
-    console.log("Downloading rules...");
     const rulesData = await fetchUrl(config.remoteUrls.rules);
     fs.writeFileSync(rulesPath, rulesData);
-
-    rulesCache = null; // Clear cache to force reload
+    rulesCache = null;
     config.lastUpdate = new Date().toISOString();
     saveConfig();
-
     loadRules();
-    
-    // Re-apply blocking rules to all active sessions after update
     initializedSessions.clear(); 
-    
     return { success: true };
   } catch (error) {
     console.error('Error updating data:', error);
@@ -149,66 +137,45 @@ function loadRules() {
 
 function isDomainAllowed(hostname, serviceDomains) {
   if (!config.blockingEnabled) return true;
-
-  // Always allow common auth domains
   for (const domain of commonAuthDomains) {
     if (hostname === domain || hostname.endsWith('.' + domain)) return true;
   }
-
-  // Check service whitelist
   if (serviceDomains && serviceDomains.length > 0) {
     for (const domain of serviceDomains) {
       if (hostname === domain || hostname.endsWith('.' + domain)) return true;
     }
   }
-
   return false;
 }
 
-// NEW: Applies blocking specifically to a service's isolated partition
 function setupSessionBlocking(serviceId) {
   if (!serviceId) return;
-
   const partitionName = `persist:${serviceId}`;
-  
-  // Avoid setting up the same session multiple times (unless cache was cleared)
   if (initializedSessions.has(partitionName)) return;
-
   const ses = session.fromPartition(partitionName);
   initializedSessions.add(partitionName);
 
-  ses.webRequest.onBeforeRequest(
-    { urls: ['*://*/*'] },
-    (details, callback) => {
-      try {
-        const url = new URL(details.url);
-        const hostname = url.hostname;
-
-        // Allow local/electron resources
-        if (details.url.startsWith('devtools://') || details.url.startsWith('file://') || details.url.startsWith('chrome-extension://')) {
-          return callback({});
-        }
-
-        // Dynamically fetch rules for this specific service
-        const rules = loadRules();
-        let serviceDomains = [];
-        if (rules && rules.service_domains && rules.service_domains[serviceId]) {
-          serviceDomains = rules.service_domains[serviceId];
-        }
-
-        if (isDomainAllowed(hostname, serviceDomains)) {
-          callback({}); // Allow
-        } else {
-          // console.log(`Blocked [${serviceId}]: ${hostname}`);
-          callback({ cancel: true }); // Block
-        }
-      } catch (e) {
-        console.error('Error in blocker:', e);
-        callback({});
+  ses.webRequest.onBeforeRequest({ urls: ['*://*/*'] }, (details, callback) => {
+    try {
+      const url = new URL(details.url);
+      const hostname = url.hostname;
+      if (details.url.startsWith('devtools://') || details.url.startsWith('file://') || details.url.startsWith('chrome-extension://')) {
+        return callback({});
       }
+      const rules = loadRules();
+      let serviceDomains = [];
+      if (rules && rules.service_domains && rules.service_domains[serviceId]) {
+        serviceDomains = rules.service_domains[serviceId];
+      }
+      if (isDomainAllowed(hostname, serviceDomains)) {
+        callback({});
+      } else {
+        callback({ cancel: true });
+      }
+    } catch (e) {
+      callback({});
     }
-  );
-  console.log(`Security and blocking setup for partition: ${partitionName}`);
+  });
 }
 
 // ==========================================
@@ -222,13 +189,13 @@ function createMainWindow() {
     minWidth: 800,
     minHeight: 600,
     title: 'AI Hub Desktop',
-    backgroundColor: '#1a1b1e', // Updated to match new dark theme
-    autoHideMenuBar: true, // Hide electron menu
+    backgroundColor: '#1a1b1e',
+    autoHideMenuBar: true, // Oculta la barra de menú de Electron
     webPreferences: {
-      nodeIntegration: false,     // Security: Strict off
-      contextIsolation: true,     // Security: Strict on
-      sandbox: true,              // Security: Enable sandbox
-      webviewTag: true,           // Required for webviews
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: true,
+      webviewTag: true,
       preload: path.join(__dirname, 'preload.js')
     }
   });
@@ -267,10 +234,9 @@ ipcMain.handle('toggle-service', (event, serviceId) => {
   return config.enabledServices;
 });
 
-// CRITICAL CHANGE: When renderer opens a tab, we setup its isolated session
 ipcMain.on('set-active-service', (event, serviceId) => {
   config.lastActiveService = serviceId;
-  setupSessionBlocking(serviceId); // Dynamically apply rules to this service's container
+  setupSessionBlocking(serviceId);
 });
 
 // ==========================================
@@ -280,7 +246,6 @@ ipcMain.on('set-active-service', (event, serviceId) => {
 app.whenReady().then(() => {
   loadConfig();
   loadRules();
-  // We no longer setup defaultSession blocking here, because webviews use isolated partitions
   createMainWindow();
 });
 
@@ -289,7 +254,6 @@ app.on('window-all-closed', () => {
 });
 
 app.on('will-quit', () => {
-  // Clean up listeners if needed
   for (const partitionName of initializedSessions) {
     const ses = session.fromPartition(partitionName);
     if (ses) ses.webRequest.onBeforeRequest(null);
