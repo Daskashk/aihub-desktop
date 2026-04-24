@@ -223,6 +223,7 @@ function createMainWindow() {
     minHeight: 600,
     title: 'AI Hub Desktop',
     backgroundColor: '#1a1b1e', // Updated to match new dark theme
+    autoHideMenuBar: true, // Hide electron menu
     webPreferences: {
       nodeIntegration: false,     // Security: Strict off
       contextIsolation: true,     // Security: Strict on
