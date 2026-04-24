@@ -1,5 +1,5 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // --- DOM Elements ---
+    // --- DOM Elements (Limpiados y sincronizados con HTML) ---
     const elements = {
         sidebar: document.getElementById('sidebar'),
         toggleSidebarBtn: document.getElementById('btn-toggle-sidebar'),
@@ -28,7 +28,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- State ---
     let config = { enabledServices: [], blockingEnabled: true, maxActiveServices: 3, darkMode: true, lastUpdate: null };
     let allServices = [];
-    let activeTabs = []; // Stores { id, url, title, webview, zoomLevel }
+    let activeTabs = []; 
     let currentTabId = null;
 
     // --- Utilities ---
@@ -75,7 +75,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const enabledServices = allServices.filter(s => config.enabledServices.includes(generateId(s[0])));
 
         if (enabledServices.length === 0) {
-            elements.servicesList.innerHTML = `<div style="padding: 16px; text-align: center; color: var(--text-secondary); font-size: 11px;">No active services.<br>Go to Settings to enable some.</div>`;
+            elements.servicesList.innerHTML = `<div style="padding: 16px; text-align: center; color: var(--text-secondary); font-size: 11px;">No active services.<br>Go to Settings.</div>`;
             return;
         }
 
@@ -87,30 +87,33 @@ document.addEventListener('DOMContentLoaded', () => {
             const isOpen = activeTabs.some(t => t.id === id);
 
             const item = document.createElement('div');
-            item.className = `service-launcher ${isActive ? 'active' : ''} ${isOpen ? 'open' : ''}`;
-            item.dataset.id = id;
+            item.className = `service-launcher ${isActive ? 'active' : ''}`;
             
+            let actionsHtml = '';
+            if (isOpen) {
+                actionsHtml = `
+                    <div class="launcher-actions">
+                        <button class="btn-xs btn-reload" title="Reload">↻</button>
+                        <button class="btn-xs btn-close" title="Close">✕</button>
+                    </div>
+                `;
+            }
+
             item.innerHTML = `
                 <div class="launcher-info">
                     <div class="service-dot" style="background-color: ${bgColor}"></div>
                     <div class="service-name">${name}</div>
                 </div>
-                ${isOpen ? `
-                <div class="launcher-actions">
-                    <button class="btn-icon-xs btn-reload" title="Reload">↻</button>
-                    <button class="btn-icon-xs btn-close-tab" title="Close">✕</button>
-                </div>
-                ` : ''}
+                ${actionsHtml}
             `;
 
+            // Lógica de clic unificada
             item.addEventListener('click', (e) => {
-                if (e.target.closest('.btn-close-tab')) {
+                if (e.target.closest('.btn-close')) {
                     closeTab(id);
-                } 
-                else if (e.target.closest('.btn-reload')) {
+                } else if (e.target.closest('.btn-reload')) {
                     reloadTab(id);
-                } 
-                else {
+                } else {
                     if (isOpen) {
                         switchToTab(id);
                     } else {
@@ -142,7 +145,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const serviceId = e.target.dataset.serviceId;
                 try {
                     config.enabledServices = await window.electronAPI.toggleService(serviceId);
-                    renderSidebarServices(); // Update sidebar
+                    renderSidebarServices();
                     showStatus(`Service ${e.target.checked ? 'enabled' : 'disabled'}`, 'success');
                 } catch (error) { e.target.checked = !e.target.checked; }
             });
@@ -151,7 +154,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // --- Tab Management ---
-      const createTab = (serviceId, url, title) => {
+    const createTab = (serviceId, url, title) => {
         if (activeTabs.length >= config.maxActiveServices) {
             showStatus(`Limit reached (${config.maxActiveServices}). Close a tab first.`, 'warning');
             return;
@@ -162,7 +165,7 @@ document.addEventListener('DOMContentLoaded', () => {
         webview.src = url;
         webview.partition = `persist:${serviceId}`;
         webview.webpreferences = { sandbox: true, contextIsolation: true, nodeIntegration: false, webSecurity: true };
-        webview.style.display = 'none'; 
+        webview.style.display = 'none'; // Oculto por defecto
 
         elements.webviewsContainer.appendChild(webview);
         activeTabs.push({ id: serviceId, url, title, webview, zoomLevel: 0 });
@@ -185,7 +188,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (index === -1) return;
 
         const tab = activeTabs[index];
-        tab.webview.remove(); // Destroy webview to free RAM
+        tab.webview.remove();
         activeTabs.splice(index, 1);
 
         if (activeTabs.length > 0) {
@@ -195,7 +198,7 @@ document.addEventListener('DOMContentLoaded', () => {
             currentTabId = null;
             elements.welcomeScreen.style.display = 'flex';
         }
-        renderSidebarServices(); // Update sidebar
+        renderSidebarServices();
     };
 
     const reloadTab = (id) => {
@@ -218,13 +221,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const zoomIn = () => {
         if (!currentTabId) return;
         const tab = activeTabs.find(t => t.id === currentTabId);
-        if (tab) applyZoom(currentTabId, Math.min(tab.zoomLevel + 0.5, 5)); // Max zoom limit
+        if (tab) applyZoom(currentTabId, Math.min(tab.zoomLevel + 0.5, 5));
     };
 
     const zoomOut = () => {
         if (!currentTabId) return;
         const tab = activeTabs.find(t => t.id === currentTabId);
-        if (tab) applyZoom(currentTabId, Math.max(tab.zoomLevel - 0.5, -5)); // Min zoom limit
+        if (tab) applyZoom(currentTabId, Math.max(tab.zoomLevel - 0.5, -5));
     };
 
     // --- Settings Management ---
@@ -272,7 +275,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') elements.settingsPanel.classList.add('hidden');
-        // Optional: Keyboard shortcuts for zoom
         if (e.ctrlKey && e.key === '=') { e.preventDefault(); zoomIn(); }
         if (e.ctrlKey && e.key === '-') { e.preventDefault(); zoomOut(); }
     });
