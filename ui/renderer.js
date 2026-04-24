@@ -1,8 +1,6 @@
 document.addEventListener('DOMContentLoaded', () => {
     // --- DOM Elements ---
     const elements = {
-        tabsList: document.getElementById('tabs-list'),
-        addTabBtn: document.getElementById('btn-add-tab'),
         sidebar: document.getElementById('sidebar'),
         toggleSidebarBtn: document.getElementById('btn-toggle-sidebar'),
         servicesList: document.getElementById('services-list'),
@@ -22,36 +20,24 @@ document.addEventListener('DOMContentLoaded', () => {
         blockingIndicator: document.getElementById('blocking-indicator'),
         blockingText: document.getElementById('blocking-text'),
         modalTabs: document.querySelectorAll('.modal-tab'),
-        tabContents: document.querySelectorAll('.tab-content')
+        tabContents: document.querySelectorAll('.tab-content'),
+        btnZoomIn: document.getElementById('btn-zoom-in'),
+        btnZoomOut: document.getElementById('btn-zoom-out')
     };
 
     // --- State ---
-    let config = {
-        enabledServices: [],
-        blockingEnabled: true,
-        maxActiveServices: 3,
-        darkMode: true,
-        lastUpdate: null
-    };
+    let config = { enabledServices: [], blockingEnabled: true, maxActiveServices: 3, darkMode: true, lastUpdate: null };
     let allServices = [];
-    let activeTabs = [];
+    let activeTabs = []; // Stores { id, url, title, webview, zoomLevel }
     let currentTabId = null;
 
     // --- Utilities ---
     const showStatus = (message, type = 'info') => {
         elements.statusMessage.textContent = message;
         elements.statusMessage.className = `status-message ${type}`;
-        setTimeout(() => {
-            elements.statusMessage.textContent = 'Ready';
-            elements.statusMessage.className = 'status-message';
-        }, 3000);
+        setTimeout(() => { elements.statusMessage.textContent = 'Ready'; elements.statusMessage.className = 'status-message'; }, 3000);
     };
-
-    const formatDate = (isoString) => {
-        if (!isoString) return 'Never';
-        return new Date(isoString).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
-    };
-
+    const formatDate = (isoString) => { if (!isoString) return 'Never'; return new Date(isoString).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }); };
     const generateId = (name) => name.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/g, '');
 
     // --- Core Logic ---
@@ -64,12 +50,9 @@ document.addEventListener('DOMContentLoaded', () => {
             elements.lastUpdate.textContent = formatDate(config.lastUpdate);
             updateBlockingUI(config.blockingEnabled);
             applyDarkMode(config.darkMode);
-            renderActiveServicesSidebar();
-            renderAllServicesSettings();
-        } catch (error) {
-            console.error('Error loading config:', error);
-            showStatus('Error loading configuration', 'error');
-        }
+            renderSidebarServices();
+            renderSettingsServices();
+        } catch (error) { console.error(error); showStatus('Error loading configuration', 'error'); }
     };
 
     const loadServices = async () => {
@@ -77,42 +60,22 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await window.electronAPI.getServices();
             if (data && data.ai_services) {
                 allServices = data.ai_services;
-                renderActiveServicesSidebar();
-                renderAllServicesSettings();
-            } else {
-                elements.servicesList.innerHTML = '<div class="info-message" style="padding:16px; color:var(--text-secondary)">No services found.</div>';
-                elements.allServicesList.innerHTML = '<div class="info-message" style="padding:16px; color:var(--text-secondary)">No services found.</div>';
+                renderSidebarServices();
+                renderSettingsServices();
             }
-        } catch (error) {
-            console.error('Error loading services:', error);
-            showStatus('Error loading services', 'error');
-        }
+        } catch (error) { console.error(error); showStatus('Error loading services', 'error'); }
     };
 
-    const updateBlockingUI = (enabled) => {
-        elements.blockingIndicator.className = enabled ? 'indicator active' : 'indicator inactive';
-        elements.blockingText.textContent = enabled ? 'Blocking Active' : 'Blocking Disabled';
-    };
+    const updateBlockingUI = (enabled) => { elements.blockingIndicator.className = enabled ? 'indicator active' : 'indicator inactive'; elements.blockingText.textContent = enabled ? 'Blocking Active' : 'Blocking Disabled'; };
+    const applyDarkMode = (enabled) => { document.body.classList.toggle('dark-mode', enabled); };
 
-    const applyDarkMode = (enabled) => {
-        document.body.classList.toggle('dark-mode', enabled);
-    };
-
-    // --- Rendering: Sidebar (Only Enabled Services) ---
-    const renderActiveServicesSidebar = () => {
+    // --- Rendering: Sidebar (Launcher & Tabs Combined) ---
+    const renderSidebarServices = () => {
         elements.servicesList.innerHTML = '';
-        
-        const enabledServices = allServices.filter(service => {
-            const serviceId = generateId(service[0]);
-            return config.enabledServices.includes(serviceId);
-        });
+        const enabledServices = allServices.filter(s => config.enabledServices.includes(generateId(s[0])));
 
         if (enabledServices.length === 0) {
-            elements.servicesList.innerHTML = `
-                <div style="padding: 16px; text-align: center; color: var(--text-secondary); font-size: 12px;">
-                    No active services.<br>Go to Settings to enable some.
-                </div>
-            `;
+            elements.servicesList.innerHTML = `<div style="padding: 16px; text-align: center; color: var(--text-secondary); font-size: 11px;">No active services.<br>Go to Settings to enable some.</div>`;
             return;
         }
 
@@ -120,33 +83,48 @@ document.addEventListener('DOMContentLoaded', () => {
             const [name, url, type, privacy, color] = service;
             const id = generateId(name);
             const bgColor = color ? `#${color}` : '#4285f4';
+            const isActive = id === currentTabId;
+            const isOpen = activeTabs.some(t => t.id === id);
 
             const item = document.createElement('div');
-            item.className = 'service-launcher';
+            item.className = `service-launcher ${isActive ? 'active' : ''} ${isOpen ? 'open' : ''}`;
             item.dataset.id = id;
             
             item.innerHTML = `
-                <div class="service-dot" style="background-color: ${bgColor}"></div>
-                <div class="service-name">${name}</div>
+                <div class="launcher-info">
+                    <div class="service-dot" style="background-color: ${bgColor}"></div>
+                    <div class="service-name">${name}</div>
+                </div>
+                ${isOpen ? `
+                <div class="launcher-actions">
+                    <button class="btn-icon-xs btn-reload" title="Reload">↻</button>
+                    <button class="btn-icon-xs btn-close-tab" title="Close">✕</button>
+                </div>
+                ` : ''}
             `;
 
-            item.addEventListener('click', () => {
-                createTab(id, url, name);
+            // Click to Open/Switch
+            item.querySelector('.launcher-info').addEventListener('click', () => {
+                if (isOpen) {
+                    switchToTab(id);
+                } else {
+                    createTab(id, url, name);
+                }
             });
+
+            // Actions
+            if (isOpen) {
+                item.querySelector('.btn-reload')?.addEventListener('click', (e) => { e.stopPropagation(); reloadTab(id); });
+                item.querySelector('.btn-close-tab')?.addEventListener('click', (e) => { e.stopPropagation(); closeTab(id); });
+            }
 
             elements.servicesList.appendChild(item);
         });
     };
 
     // --- Rendering: Settings (All Services with Toggles) ---
-    const renderAllServicesSettings = () => {
+    const renderSettingsServices = () => {
         elements.allServicesList.innerHTML = '';
-
-        if (allServices.length === 0) {
-            elements.allServicesList.innerHTML = '<div style="padding:16px; color:var(--text-secondary)">Click 🔄 to load services.</div>';
-            return;
-        }
-
         allServices.forEach(service => {
             const [name, url, type, privacy, color] = service;
             const id = generateId(name);
@@ -155,32 +133,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const item = document.createElement('div');
             item.className = 'service-setting-item';
-            
             item.innerHTML = `
-                <div class="service-info">
-                    <div class="service-dot" style="background-color: ${bgColor}"></div>
-                    <div class="service-info-name">${name}</div>
-                </div>
-                <label class="toggle-switch">
-                    <input type="checkbox" ${isEnabled ? 'checked' : ''} data-service-id="${id}">
-                    <span class="toggle-slider"></span>
-                </label>
+                <div class="service-info"><div class="service-dot" style="background-color: ${bgColor}"></div><div class="service-info-name">${name}</div></div>
+                <label class="toggle-switch"><input type="checkbox" ${isEnabled ? 'checked' : ''} data-service-id="${id}"><span class="toggle-slider"></span></label>
             `;
-
-            // Event: Toggle Service
-            item.querySelector('input[type="checkbox"]').addEventListener('change', async (e) => {
+            item.querySelector('input').addEventListener('change', async (e) => {
                 const serviceId = e.target.dataset.serviceId;
                 try {
                     config.enabledServices = await window.electronAPI.toggleService(serviceId);
-                    renderActiveServicesSidebar(); // Update sidebar immediately!
+                    renderSidebarServices(); // Update sidebar
                     showStatus(`Service ${e.target.checked ? 'enabled' : 'disabled'}`, 'success');
-                } catch (error) {
-                    console.error('Error toggling service:', error);
-                    showStatus('Error updating service', 'error');
-                    e.target.checked = !e.target.checked; // Revert
-                }
+                } catch (error) { e.target.checked = !e.target.checked; }
             });
-
             elements.allServicesList.appendChild(item);
         });
     };
@@ -192,108 +156,95 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        const existingTab = activeTabs.find(t => t.id === serviceId);
-        if (existingTab) {
-            switchToTab(serviceId);
-            return;
-        }
-
-        const tab = document.createElement('div');
-        tab.className = 'tab-item active';
-        tab.dataset.id = serviceId;
-        tab.innerHTML = `
-            <span class="tab-title">${title}</span>
-            <button class="btn-close-tab">✕</button>
-        `;
-
         const webview = document.createElement('webview');
         webview.dataset.id = serviceId;
         webview.src = url;
-        
-        webview.partition = `persist:${serviceId}`; 
-        
-        webview.webpreferences = {
-            sandbox: true,          
-            contextIsolation: true, 
-            nodeIntegration: false,
-            webSecurity: true      
-        };
+        webview.partition = `persist:${serviceId}`;
+        webview.webpreferences = { sandbox: true, contextIsolation: true, nodeIntegration: false, webSecurity: true };
 
-        tab.addEventListener('click', (e) => {
-            if (!e.target.classList.contains('btn-close-tab')) switchToTab(serviceId);
-        });
-        tab.querySelector('.btn-close-tab').addEventListener('click', (e) => {
-            e.stopPropagation();
-            closeTab(serviceId);
-        });
-
-        elements.tabsList.appendChild(tab);
         elements.webviewsContainer.appendChild(webview);
-
-        activeTabs.push({ id: serviceId, url, title, webview });
+        activeTabs.push({ id: serviceId, url, title, webview, zoomLevel: 0 });
+        
         switchToTab(serviceId);
         elements.welcomeScreen.style.display = 'none';
-
         window.electronAPI.setActiveService(serviceId);
+        renderSidebarServices(); // Update UI to show close/reload buttons
     };
 
     const switchToTab = (id) => {
-        document.querySelectorAll('.tab-item').forEach(tab => tab.classList.toggle('active', tab.dataset.id === id));
-        document.querySelectorAll('webview').forEach(wv => {
-            wv.style.display = (wv.dataset.id === id) ? 'flex' : 'none';
-        });
         currentTabId = id;
+        activeTabs.forEach(t => { t.webview.style.display = (t.id === id) ? 'flex' : 'none'; });
         window.electronAPI.setActiveService(id);
+        renderSidebarServices(); // Update active state in sidebar
     };
 
     const closeTab = (id) => {
-        const tab = document.querySelector(`.tab-item[data-id="${id}"]`);
-        const webview = document.querySelector(`webview[data-id="${id}"]`);
-        
-        if (tab) tab.remove();
-        if (webview) webview.remove(); // Frees RAM
-
         const index = activeTabs.findIndex(t => t.id === id);
-        if (index !== -1) activeTabs.splice(index, 1);
+        if (index === -1) return;
+
+        const tab = activeTabs[index];
+        tab.webview.remove(); // Destroy webview to free RAM
+        activeTabs.splice(index, 1);
 
         if (activeTabs.length > 0) {
             const newIndex = Math.min(index, activeTabs.length - 1);
             switchToTab(activeTabs[newIndex].id);
         } else {
-            elements.welcomeScreen.style.display = 'flex';
             currentTabId = null;
+            elements.welcomeScreen.style.display = 'flex';
         }
+        renderSidebarServices(); // Update sidebar
+    };
+
+    const reloadTab = (id) => {
+        const tab = activeTabs.find(t => t.id === id);
+        if (tab) {
+            tab.webview.reload();
+            showStatus(`Reloading ${tab.title}...`, 'info');
+        }
+    };
+
+    // --- Zoom Management ---
+    const applyZoom = (id, level) => {
+        const tab = activeTabs.find(t => t.id === id);
+        if (tab) {
+            tab.zoomLevel = level;
+            tab.webview.setZoomLevel(level);
+        }
+    };
+
+    const zoomIn = () => {
+        if (!currentTabId) return;
+        const tab = activeTabs.find(t => t.id === currentTabId);
+        if (tab) applyZoom(currentTabId, Math.min(tab.zoomLevel + 0.5, 5)); // Max zoom limit
+    };
+
+    const zoomOut = () => {
+        if (!currentTabId) return;
+        const tab = activeTabs.find(t => t.id === currentTabId);
+        if (tab) applyZoom(currentTabId, Math.max(tab.zoomLevel - 0.5, -5)); // Min zoom limit
     };
 
     // --- Settings Management ---
     const saveSettings = async () => {
-        const newConfig = {
-            blockingEnabled: elements.toggleBlocking.checked,
-            maxActiveServices: parseInt(elements.maxServicesInput.value) || 3,
-            darkMode: elements.toggleDarkMode.checked
-        };
+        const newConfig = { blockingEnabled: elements.toggleBlocking.checked, maxActiveServices: parseInt(elements.maxServicesInput.value) || 3, darkMode: elements.toggleDarkMode.checked };
         try {
             config = await window.electronAPI.saveConfig(newConfig);
             showStatus('Settings saved', 'success');
             updateBlockingUI(config.blockingEnabled);
             applyDarkMode(config.darkMode);
             elements.settingsPanel.classList.add('hidden');
-        } catch (error) {
-            showStatus('Error saving settings', 'error');
-        }
+        } catch (error) { showStatus('Error saving settings', 'error'); }
     };
 
     // --- Event Listeners ---
-    elements.addTabBtn.addEventListener('click', () => elements.sidebar.classList.toggle('hidden'));
     elements.toggleSidebarBtn.addEventListener('click', () => elements.sidebar.classList.toggle('hidden'));
-
-    elements.btnSettings.addEventListener('click', () => {
-        renderAllServicesSettings(); // Refresh list when opening
-        elements.settingsPanel.classList.remove('hidden');
-    });
-
+    elements.btnSettings.addEventListener('click', () => { renderSettingsServices(); elements.settingsPanel.classList.remove('hidden'); });
     elements.btnCloseSettings.addEventListener('click', () => elements.settingsPanel.classList.add('hidden'));
     elements.btnSaveSettings.addEventListener('click', saveSettings);
+
+    elements.btnZoomIn.addEventListener('click', zoomIn);
+    elements.btnZoomOut.addEventListener('click', zoomOut);
 
     elements.btnUpdate.addEventListener('click', async () => {
         showStatus('Updating services...', 'info');
@@ -304,20 +255,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 config.lastUpdate = new Date().toISOString();
                 elements.lastUpdate.textContent = formatDate(config.lastUpdate);
                 showStatus('Update successful', 'success');
-            } else {
-                showStatus('Update failed: ' + result.error, 'error');
-            }
-        } catch (error) {
-            showStatus('Update failed', 'error');
-        }
+            } else { showStatus('Update failed: ' + result.error, 'error'); }
+        } catch (error) { showStatus('Update failed', 'error'); }
     });
 
-    // Settings Tabs Navigation
     elements.modalTabs.forEach(tab => {
         tab.addEventListener('click', (e) => {
             elements.modalTabs.forEach(t => t.classList.remove('active'));
             elements.tabContents.forEach(c => c.classList.remove('active'));
-            
             e.target.classList.add('active');
             document.getElementById(`tab-${e.target.dataset.tab}`).classList.add('active');
         });
@@ -325,13 +270,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') elements.settingsPanel.classList.add('hidden');
+        // Optional: Keyboard shortcuts for zoom
+        if (e.ctrlKey && e.key === '=') { e.preventDefault(); zoomIn(); }
+        if (e.ctrlKey && e.key === '-') { e.preventDefault(); zoomOut(); }
     });
 
     // --- Initialization ---
-    const init = async () => {
-        await loadConfig();
-        await loadServices();
-    };
-
+    const init = async () => { await loadConfig(); await loadServices(); };
     init();
 });
