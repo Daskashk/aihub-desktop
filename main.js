@@ -29,6 +29,9 @@ let config = {...defaultConfig};
 let commonAuthDomains = new Set();
 let rulesCache = null;
 
+// Set to keep track of sessions that already have blockers installed
+const initializedSessions = new Set();
+
 // ==========================================
 // CONFIGURATION MANAGEMENT
 // ==========================================
@@ -38,16 +41,14 @@ function loadConfig() {
     if (fs.existsSync(configPath)) {
       const data = fs.readFileSync(configPath, 'utf8');
       const savedConfig = JSON.parse(data);
-      // Deep merge with defaults to ensure all keys exist
       config = {
         ...defaultConfig,
         ...savedConfig,
-        // Ensure arrays exist
         enabledServices: savedConfig.enabledServices || defaultConfig.enabledServices
       };
     }
     saveConfig();
-    console.log('Config loaded:', config);
+    console.log('Config loaded');
   } catch (error) {
     console.error('Error loading config:', error);
     config = {...defaultConfig};
@@ -58,7 +59,6 @@ function loadConfig() {
 function saveConfig() {
   try {
     fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
-    console.log('Config saved');
   } catch (error) {
     console.error('Error saving config:', error);
   }
@@ -71,18 +71,11 @@ function saveConfig() {
 function fetchUrl(url) {
   return new Promise((resolve, reject) => {
     const protocol = url.startsWith('https') ? https : http;
-
     protocol.get(url, (response) => {
       if (response.statusCode === 301 || response.statusCode === 302) {
-        if (response.headers.location) {
-          return fetchUrl(response.headers.location).then(resolve).catch(reject);
-        }
+        if (response.headers.location) return fetchUrl(response.headers.location).then(resolve).catch(reject);
       }
-
-      if (response.statusCode !== 200) {
-        return reject(new Error(`HTTP Status ${response.statusCode}`));
-      }
-
+      if (response.statusCode !== 200) return reject(new Error(`HTTP Status ${response.statusCode}`));
       let data = '';
       response.on('data', chunk => data += chunk);
       response.on('end', () => resolve(data));
@@ -102,13 +95,15 @@ async function updateRemoteData() {
     const rulesData = await fetchUrl(config.remoteUrls.rules);
     fs.writeFileSync(rulesPath, rulesData);
 
-    // Clear cache
-    rulesCache = null;
-
+    rulesCache = null; // Clear cache to force reload
     config.lastUpdate = new Date().toISOString();
     saveConfig();
 
     loadRules();
+    
+    // Re-apply blocking rules to all active sessions after update
+    initializedSessions.clear(); 
+    
     return { success: true };
   } catch (error) {
     console.error('Error updating data:', error);
@@ -132,19 +127,14 @@ function loadServices() {
 function loadRules() {
   try {
     if (rulesCache) return rulesCache;
-
     if (fs.existsSync(rulesPath)) {
       const data = fs.readFileSync(rulesPath, 'utf8');
       if (!data) return null;
-
       const rules = JSON.parse(data);
       rulesCache = rules;
-
       if (rules.common_auth_domains) {
         commonAuthDomains = new Set(rules.common_auth_domains);
-        console.log('Common Auth Domains Updated:', rules.common_auth_domains);
       }
-
       return rules;
     }
   } catch (error) {
@@ -154,7 +144,7 @@ function loadRules() {
 }
 
 // ==========================================
-// DOMAIN BLOCKING LOGIC
+// DOMAIN BLOCKING LOGIC (PER SESSION)
 // ==========================================
 
 function isDomainAllowed(hostname, serviceDomains) {
@@ -162,25 +152,30 @@ function isDomainAllowed(hostname, serviceDomains) {
 
   // Always allow common auth domains
   for (const domain of commonAuthDomains) {
-    if (hostname === domain || hostname.endsWith('.' + domain)) {
-      return true;
-    }
+    if (hostname === domain || hostname.endsWith('.' + domain)) return true;
   }
 
   // Check service whitelist
   if (serviceDomains && serviceDomains.length > 0) {
     for (const domain of serviceDomains) {
-      if (hostname === domain || hostname.endsWith('.' + domain)) {
-        return true;
-      }
+      if (hostname === domain || hostname.endsWith('.' + domain)) return true;
     }
   }
 
   return false;
 }
 
-function setupWebRequestBlocking() {
-  const ses = session.defaultSession;
+// NEW: Applies blocking specifically to a service's isolated partition
+function setupSessionBlocking(serviceId) {
+  if (!serviceId) return;
+
+  const partitionName = `persist:${serviceId}`;
+  
+  // Avoid setting up the same session multiple times (unless cache was cleared)
+  if (initializedSessions.has(partitionName)) return;
+
+  const ses = session.fromPartition(partitionName);
+  initializedSessions.add(partitionName);
 
   ses.webRequest.onBeforeRequest(
     { urls: ['*://*/*'] },
@@ -189,27 +184,22 @@ function setupWebRequestBlocking() {
         const url = new URL(details.url);
         const hostname = url.hostname;
 
-        // Allow local resources
-        if (details.url.startsWith('devtools://') ||
-          details.url.startsWith('file://') ||
-          details.url.startsWith('chrome-extension://')) {
+        // Allow local/electron resources
+        if (details.url.startsWith('devtools://') || details.url.startsWith('file://') || details.url.startsWith('chrome-extension://')) {
           return callback({});
-          }
+        }
 
-          const serviceId = config.lastActiveService;
+        // Dynamically fetch rules for this specific service
+        const rules = loadRules();
         let serviceDomains = [];
-
-        if (serviceId) {
-          const rules = loadRules();
-          if (rules && rules.service_domains && rules.service_domains[serviceId]) {
-            serviceDomains = rules.service_domains[serviceId];
-          }
+        if (rules && rules.service_domains && rules.service_domains[serviceId]) {
+          serviceDomains = rules.service_domains[serviceId];
         }
 
         if (isDomainAllowed(hostname, serviceDomains)) {
           callback({}); // Allow
         } else {
-          console.log(`Blocked: ${hostname} (Service: ${serviceId || 'none'})`);
+          // console.log(`Blocked [${serviceId}]: ${hostname}`);
           callback({ cancel: true }); // Block
         }
       } catch (e) {
@@ -218,6 +208,7 @@ function setupWebRequestBlocking() {
       }
     }
   );
+  console.log(`Security and blocking setup for partition: ${partitionName}`);
 }
 
 // ==========================================
@@ -231,19 +222,18 @@ function createMainWindow() {
     minWidth: 800,
     minHeight: 600,
     title: 'AI Hub Desktop',
-    backgroundColor: '#202124',
+    backgroundColor: '#1a1b1e', // Updated to match new dark theme
     webPreferences: {
-      nodeIntegration: false,
-      contextIsolation: true,
-      preload: path.join(__dirname, 'preload.js'),
-                                       webviewTag: true,
-                                       sandbox: false
+      nodeIntegration: false,     // Security: Strict off
+      contextIsolation: true,     // Security: Strict on
+      sandbox: true,              // Security: Enable sandbox
+      webviewTag: true,           // Required for webviews
+      preload: path.join(__dirname, 'preload.js')
     }
   });
 
   mainWindow.loadFile(path.join(__dirname, 'ui', 'index.html'));
   mainWindow.on('closed', () => { mainWindow = null; });
-
   return mainWindow;
 }
 
@@ -252,22 +242,14 @@ function createMainWindow() {
 // ==========================================
 
 ipcMain.handle('get-config', () => config);
-
-ipcMain.handle('get-services', () => {
-  const services = loadServices();
-  return services;
-});
-
+ipcMain.handle('get-services', () => loadServices());
 ipcMain.handle('get-rules', () => loadRules());
-
 ipcMain.handle('update-remote-data', async () => await updateRemoteData());
 
 ipcMain.handle('save-config', (event, newConfig) => {
-  // Merge with existing config
   if (newConfig.enabledServices) {
-    config.enabledServices = [...new Set(newConfig.enabledServices)]; // Remove duplicates
+    config.enabledServices = [...new Set(newConfig.enabledServices)];
   }
-
   config = { ...config, ...newConfig };
   saveConfig();
   return config;
@@ -284,8 +266,10 @@ ipcMain.handle('toggle-service', (event, serviceId) => {
   return config.enabledServices;
 });
 
+// CRITICAL CHANGE: When renderer opens a tab, we setup its isolated session
 ipcMain.on('set-active-service', (event, serviceId) => {
   config.lastActiveService = serviceId;
+  setupSessionBlocking(serviceId); // Dynamically apply rules to this service's container
 });
 
 // ==========================================
@@ -295,7 +279,7 @@ ipcMain.on('set-active-service', (event, serviceId) => {
 app.whenReady().then(() => {
   loadConfig();
   loadRules();
-  setupWebRequestBlocking();
+  // We no longer setup defaultSession blocking here, because webviews use isolated partitions
   createMainWindow();
 });
 
@@ -304,5 +288,10 @@ app.on('window-all-closed', () => {
 });
 
 app.on('will-quit', () => {
-  session.defaultSession.webRequest.onBeforeRequest(null);
+  // Clean up listeners if needed
+  for (const partitionName of initializedSessions) {
+    const ses = session.fromPartition(partitionName);
+    if (ses) ses.webRequest.onBeforeRequest(null);
+  }
+  initializedSessions.clear();
 });
