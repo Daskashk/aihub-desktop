@@ -1,5 +1,5 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // --- DOM Elements (Limpiados y sincronizados con HTML) ---
+    // --- DOM Elements ---
     const elements = {
         sidebar: document.getElementById('sidebar'),
         toggleSidebarBtn: document.getElementById('btn-toggle-sidebar'),
@@ -69,7 +69,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const updateBlockingUI = (enabled) => { elements.blockingIndicator.className = enabled ? 'indicator active' : 'indicator inactive'; elements.blockingText.textContent = enabled ? 'Blocking Active' : 'Blocking Disabled'; };
     const applyDarkMode = (enabled) => { document.body.classList.toggle('dark-mode', enabled); };
 
-    // --- Rendering: Sidebar (Launcher & Tabs Combined) ---
+    // --- Rendering: Sidebar ---
     const renderSidebarServices = () => {
         elements.servicesList.innerHTML = '';
         const enabledServices = allServices.filter(s => config.enabledServices.includes(generateId(s[0])));
@@ -107,7 +107,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 ${actionsHtml}
             `;
 
-            // Lógica de clic unificada
             item.addEventListener('click', (e) => {
                 if (e.target.closest('.btn-close')) {
                     closeTab(id);
@@ -126,7 +125,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     };
 
-    // --- Rendering: Settings (All Services with Toggles) ---
+    // --- Rendering: Settings ---
     const renderSettingsServices = () => {
         elements.allServicesList.innerHTML = '';
         allServices.forEach(service => {
@@ -164,8 +163,42 @@ document.addEventListener('DOMContentLoaded', () => {
         webview.dataset.id = serviceId;
         webview.src = url;
         webview.partition = `persist:${serviceId}`;
-        webview.webpreferences = { sandbox: true, contextIsolation: true, nodeIntegration: false, webSecurity: true };
-        webview.style.display = 'none'; // Oculto por defecto
+        webview.webpreferences = { 
+            sandbox: true, 
+            contextIsolation: true, 
+            nodeIntegration: false, 
+            webSecurity: true,
+            allowPopups: true
+        };
+        webview.style.display = 'none';
+        webview.useragent = webview.useragent || ''; // Will use default
+
+        // DevTools: Right-click to inspect
+        webview.addEventListener('context-menu', (e) => {
+            e.preventDefault();
+            if (webview.getWebContentsId) {
+                const wcId = webview.getWebContentsId();
+                if (wcId) {
+                    window.electronAPI.openDevTools(wcId);
+                }
+            }
+        });
+
+        // Debug: Log loading events
+        webview.addEventListener('did-start-loading', () => {
+            console.log(`[Webview] ${title}: Loading started...`);
+        });
+        
+        webview.addEventListener('did-finish-load', () => {
+            console.log(`[Webview] ${title}: Load finished`);
+        });
+
+        webview.addEventListener('did-fail-load', (e) => {
+            console.error(`[Webview] ${title}: Load failed - ${e.errorDescription} (Code: ${e.errorCode})`);
+            if (e.errorCode !== -3) { // -3 is often a benign cancellation
+                showStatus(`Failed to load ${title}: ${e.errorDescription}`, 'error');
+            }
+        });
 
         elements.webviewsContainer.appendChild(webview);
         activeTabs.push({ id: serviceId, url, title, webview, zoomLevel: 0 });
