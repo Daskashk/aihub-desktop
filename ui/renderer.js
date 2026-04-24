@@ -103,20 +103,25 @@ document.addEventListener('DOMContentLoaded', () => {
                 ` : ''}
             `;
 
-            // Click to Open/Switch
-            item.querySelector('.launcher-info').addEventListener('click', () => {
-                if (isOpen) {
-                    switchToTab(id);
-                } else {
-                    createTab(id, url, name);
+            // Lógica de clic unificada en el contenedor principal
+            item.addEventListener('click', (e) => {
+                // Si se hizo clic en el botón de cerrar
+                if (e.target.closest('.btn-close-tab')) {
+                    closeTab(id);
+                } 
+                // Si se hizo clic en el botón de recargar
+                else if (e.target.closest('.btn-reload')) {
+                    reloadTab(id);
+                } 
+                // Si se hizo clic en cualquier otra parte (nombre o punto)
+                else {
+                    if (isOpen) {
+                        switchToTab(id);
+                    } else {
+                        createTab(id, url, name);
+                    }
                 }
             });
-
-            // Actions
-            if (isOpen) {
-                item.querySelector('.btn-reload')?.addEventListener('click', (e) => { e.stopPropagation(); reloadTab(id); });
-                item.querySelector('.btn-close-tab')?.addEventListener('click', (e) => { e.stopPropagation(); closeTab(id); });
-            }
 
             elements.servicesList.appendChild(item);
         });
