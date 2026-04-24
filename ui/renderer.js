@@ -6,6 +6,7 @@ document.addEventListener('DOMContentLoaded', () => {
         sidebar: document.getElementById('sidebar'),
         toggleSidebarBtn: document.getElementById('btn-toggle-sidebar'),
         servicesList: document.getElementById('services-list'),
+        allServicesList: document.getElementById('all-services-list'),
         webviewsContainer: document.getElementById('webviews-container'),
         welcomeScreen: document.getElementById('welcome-screen'),
         settingsPanel: document.getElementById('settings-panel'),
@@ -20,6 +21,8 @@ document.addEventListener('DOMContentLoaded', () => {
         statusMessage: document.getElementById('status-message'),
         blockingIndicator: document.getElementById('blocking-indicator'),
         blockingText: document.getElementById('blocking-text'),
+        modalTabs: document.querySelectorAll('.modal-tab'),
+        tabContents: document.querySelectorAll('.tab-content')
     };
 
     // --- State ---
@@ -61,7 +64,8 @@ document.addEventListener('DOMContentLoaded', () => {
             elements.lastUpdate.textContent = formatDate(config.lastUpdate);
             updateBlockingUI(config.blockingEnabled);
             applyDarkMode(config.darkMode);
-            renderServicesList();
+            renderActiveServicesSidebar();
+            renderAllServicesSettings();
         } catch (error) {
             console.error('Error loading config:', error);
             showStatus('Error loading configuration', 'error');
@@ -73,9 +77,11 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await window.electronAPI.getServices();
             if (data && data.ai_services) {
                 allServices = data.ai_services;
-                renderServicesList();
+                renderActiveServicesSidebar();
+                renderAllServicesSettings();
             } else {
                 elements.servicesList.innerHTML = '<div class="info-message" style="padding:16px; color:var(--text-secondary)">No services found.</div>';
+                elements.allServicesList.innerHTML = '<div class="info-message" style="padding:16px; color:var(--text-secondary)">No services found.</div>';
             }
         } catch (error) {
             console.error('Error loading services:', error);
@@ -92,11 +98,52 @@ document.addEventListener('DOMContentLoaded', () => {
         document.body.classList.toggle('dark-mode', enabled);
     };
 
-    // --- Rendering ---
-    const renderServicesList = () => {
+    // --- Rendering: Sidebar (Only Enabled Services) ---
+    const renderActiveServicesSidebar = () => {
         elements.servicesList.innerHTML = '';
+        
+        const enabledServices = allServices.filter(service => {
+            const serviceId = generateId(service[0]);
+            return config.enabledServices.includes(serviceId);
+        });
+
+        if (enabledServices.length === 0) {
+            elements.servicesList.innerHTML = `
+                <div style="padding: 16px; text-align: center; color: var(--text-secondary); font-size: 12px;">
+                    No active services.<br>Go to Settings to enable some.
+                </div>
+            `;
+            return;
+        }
+
+        enabledServices.forEach(service => {
+            const [name, url, type, privacy, color] = service;
+            const id = generateId(name);
+            const bgColor = color ? `#${color}` : '#4285f4';
+
+            const item = document.createElement('div');
+            item.className = 'service-launcher';
+            item.dataset.id = id;
+            
+            item.innerHTML = `
+                <div class="service-dot" style="background-color: ${bgColor}"></div>
+                <div class="service-name">${name}</div>
+            `;
+
+            item.addEventListener('click', () => {
+                createTab(id, url, name);
+            });
+
+            elements.servicesList.appendChild(item);
+        });
+    };
+
+    // --- Rendering: Settings (All Services with Toggles) ---
+    const renderAllServicesSettings = () => {
+        elements.allServicesList.innerHTML = '';
+
         if (allServices.length === 0) {
-            elements.servicesList.innerHTML = '<div class="info-message" style="padding:16px; color:var(--text-secondary)">Click 🔄 to load services.</div>';
+            elements.allServicesList.innerHTML = '<div style="padding:16px; color:var(--text-secondary)">Click 🔄 to load services.</div>';
             return;
         }
 
@@ -107,12 +154,12 @@ document.addEventListener('DOMContentLoaded', () => {
             const isEnabled = config.enabledServices.includes(id);
 
             const item = document.createElement('div');
-            item.className = `service-item ${isEnabled ? '' : 'disabled'}`;
+            item.className = 'service-setting-item';
             
             item.innerHTML = `
-                <div class="service-info" data-id="${id}" data-url="${url}" data-name="${name}">
-                    <div class="service-color" style="background-color: ${bgColor}"></div>
-                    <div class="service-name">${name}</div>
+                <div class="service-info">
+                    <div class="service-dot" style="background-color: ${bgColor}"></div>
+                    <div class="service-info-name">${name}</div>
                 </div>
                 <label class="toggle-switch">
                     <input type="checkbox" ${isEnabled ? 'checked' : ''} data-service-id="${id}">
@@ -120,22 +167,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 </label>
             `;
 
-            // Event: Open Tab
-            item.querySelector('.service-info').addEventListener('click', (e) => {
-                if (isEnabled) {
-                    createTab(id, url, name);
-                } else {
-                    showStatus(`Enable ${name} first`, 'warning');
-                }
-            });
-
             // Event: Toggle Service
             item.querySelector('input[type="checkbox"]').addEventListener('change', async (e) => {
-                e.stopPropagation(); // Prevent opening tab when toggling
                 const serviceId = e.target.dataset.serviceId;
                 try {
                     config.enabledServices = await window.electronAPI.toggleService(serviceId);
-                    renderServicesList(); // Re-render to update disabled styling
+                    renderActiveServicesSidebar(); // Update sidebar immediately!
                     showStatus(`Service ${e.target.checked ? 'enabled' : 'disabled'}`, 'success');
                 } catch (error) {
                     console.error('Error toggling service:', error);
@@ -144,7 +181,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             });
 
-            elements.servicesList.appendChild(item);
+            elements.allServicesList.appendChild(item);
         });
     };
 
@@ -161,7 +198,6 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // Create Tab Element
         const tab = document.createElement('div');
         tab.className = 'tab-item active';
         tab.dataset.id = serviceId;
@@ -170,13 +206,10 @@ document.addEventListener('DOMContentLoaded', () => {
             <button class="btn-close-tab">✕</button>
         `;
 
-        // Create Webview
         const webview = document.createElement('webview');
         webview.dataset.id = serviceId;
         webview.src = url;
-        webview.allowpopups = "true";
 
-        // Listeners
         tab.addEventListener('click', (e) => {
             if (!e.target.classList.contains('btn-close-tab')) switchToTab(serviceId);
         });
@@ -185,30 +218,20 @@ document.addEventListener('DOMContentLoaded', () => {
             closeTab(serviceId);
         });
 
-        // Append to DOM
         elements.tabsList.appendChild(tab);
         elements.webviewsContainer.appendChild(webview);
 
-        // Update State
         activeTabs.push({ id: serviceId, url, title, webview });
         switchToTab(serviceId);
         elements.welcomeScreen.style.display = 'none';
 
-        // Optimize RAM: Stop loading background tabs if limit is tight
         window.electronAPI.setActiveService(serviceId);
     };
 
     const switchToTab = (id) => {
-        document.querySelectorAll('.tab-item').forEach(tab => {
-            tab.classList.toggle('active', tab.dataset.id === id);
-        });
+        document.querySelectorAll('.tab-item').forEach(tab => tab.classList.toggle('active', tab.dataset.id === id));
         document.querySelectorAll('webview').forEach(wv => {
-            const isActive = wv.dataset.id === id;
-            wv.style.display = isActive ? 'flex' : 'none';
-            // Freeze background tabs to save CPU/RAM
-            if (isActive) {
-                // Optional: wv.reload(); 
-            }
+            wv.style.display = (wv.dataset.id === id) ? 'flex' : 'none';
         });
         currentTabId = id;
         window.electronAPI.setActiveService(id);
@@ -219,7 +242,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const webview = document.querySelector(`webview[data-id="${id}"]`);
         
         if (tab) tab.remove();
-        if (webview) webview.remove(); // Removes from DOM, freeing RAM
+        if (webview) webview.remove(); // Frees RAM
 
         const index = activeTabs.findIndex(t => t.id === id);
         if (index !== -1) activeTabs.splice(index, 1);
@@ -252,22 +275,15 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // --- Event Listeners ---
-    elements.addTabBtn.addEventListener('click', () => {
-        elements.sidebar.classList.toggle('hidden');
-    });
-
-    elements.toggleSidebarBtn.addEventListener('click', () => {
-        elements.sidebar.classList.toggle('hidden');
-    });
+    elements.addTabBtn.addEventListener('click', () => elements.sidebar.classList.toggle('hidden'));
+    elements.toggleSidebarBtn.addEventListener('click', () => elements.sidebar.classList.toggle('hidden'));
 
     elements.btnSettings.addEventListener('click', () => {
+        renderAllServicesSettings(); // Refresh list when opening
         elements.settingsPanel.classList.remove('hidden');
     });
 
-    elements.btnCloseSettings.addEventListener('click', () => {
-        elements.settingsPanel.classList.add('hidden');
-    });
-
+    elements.btnCloseSettings.addEventListener('click', () => elements.settingsPanel.classList.add('hidden'));
     elements.btnSaveSettings.addEventListener('click', saveSettings);
 
     elements.btnUpdate.addEventListener('click', async () => {
@@ -287,10 +303,19 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // Settings Tabs Navigation
+    elements.modalTabs.forEach(tab => {
+        tab.addEventListener('click', (e) => {
+            elements.modalTabs.forEach(t => t.classList.remove('active'));
+            elements.tabContents.forEach(c => c.classList.remove('active'));
+            
+            e.target.classList.add('active');
+            document.getElementById(`tab-${e.target.dataset.tab}`).classList.add('active');
+        });
+    });
+
     document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') {
-            elements.settingsPanel.classList.add('hidden');
-        }
+        if (e.key === 'Escape') elements.settingsPanel.classList.add('hidden');
     });
 
     // --- Initialization ---
