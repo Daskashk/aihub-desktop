@@ -33,13 +33,13 @@
 
         <!-- Main Content -->
         <main class="main-content">
-            <!-- Sidebar -->
+            <!-- Sidebar: Active Services Only -->
             <aside id="sidebar" class="sidebar">
                 <div class="sidebar-header">
-                    <h3>Services</h3>
+                    <h3>Active Services</h3>
                 </div>
                 <div id="services-list" class="services-list">
-                    <!-- Services populated here -->
+                    <!-- Active services populated here -->
                 </div>
             </aside>
 
@@ -60,33 +60,50 @@
                     <h2>Settings</h2>
                     <button id="btn-close-settings" class="btn btn-icon">✕</button>
                 </div>
+                
+                <!-- Settings Tabs -->
+                <div class="modal-tabs">
+                    <button class="modal-tab active" data-tab="general">General</button>
+                    <button class="modal-tab" data-tab="services">Manage Services</button>
+                </div>
+
                 <div class="modal-body">
-                    <div class="setting-group">
-                        <label class="setting-label">
-                            <input type="checkbox" id="toggle-blocking" checked>
-                            <span>Enable Domain Blocking</span>
-                        </label>
-                        <small class="setting-hint">Blocks connections to non-whitelisted domains.</small>
-                    </div>
-                    <div class="setting-group">
-                        <label class="setting-label" for="max-services">Active Services Limit</label>
-                        <input type="number" id="max-services" min="1" max="10" value="3" class="input-field">
-                        <small class="setting-hint">Limits RAM usage by restricting concurrent services.</small>
-                    </div>
-                    <div class="setting-group">
-                        <label class="setting-label">
-                            <input type="checkbox" id="toggle-dark-mode" checked>
-                            <span>Dark Mode</span>
-                        </label>
-                    </div>
-                    <div class="setting-group">
-                        <div class="info-box">
-                            <p><strong>Last Updated:</strong> <span id="last-update">Never</span></p>
+                    <!-- General Tab -->
+                    <div id="tab-general" class="tab-content active">
+                        <div class="setting-group">
+                            <label class="setting-label">
+                                <input type="checkbox" id="toggle-blocking" checked>
+                                <span>Enable Domain Blocking</span>
+                            </label>
+                            <small class="setting-hint">Blocks connections to non-whitelisted domains.</small>
+                        </div>
+                        <div class="setting-group">
+                            <label class="setting-label" for="max-services">Active Services Limit</label>
+                            <input type="number" id="max-services" min="1" max="10" value="3" class="input-field">
+                            <small class="setting-hint">Limits RAM usage by restricting concurrent services.</small>
+                        </div>
+                        <div class="setting-group">
+                            <label class="setting-label">
+                                <input type="checkbox" id="toggle-dark-mode" checked>
+                                <span>Dark Mode</span>
+                            </label>
+                        </div>
+                        <div class="setting-group">
+                            <div class="info-box">
+                                <p><strong>Last Updated:</strong> <span id="last-update">Never</span></p>
+                            </div>
+                        </div>
+                        <div class="setting-actions">
+                            <button id="btn-save-settings" class="btn btn-primary">Save Changes</button>
                         </div>
                     </div>
-                </div>
-                <div class="modal-footer">
-                    <button id="btn-save-settings" class="btn btn-primary">Save Changes</button>
+
+                    <!-- Services Tab -->
+                    <div id="tab-services" class="tab-content">
+                        <div id="all-services-list" class="services-manager">
+                            <!-- All services with toggles will be here -->
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
