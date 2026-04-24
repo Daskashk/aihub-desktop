@@ -209,6 +209,15 @@ document.addEventListener('DOMContentLoaded', () => {
         const webview = document.createElement('webview');
         webview.dataset.id = serviceId;
         webview.src = url;
+        
+        webview.partition = `persist:${serviceId}`; 
+        
+        webview.webpreferences = {
+            sandbox: true,          
+            contextIsolation: true, 
+            nodeIntegration: false,
+            webSecurity: true      
+        };
 
         tab.addEventListener('click', (e) => {
             if (!e.target.classList.contains('btn-close-tab')) switchToTab(serviceId);
