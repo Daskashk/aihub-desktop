@@ -103,17 +103,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 ` : ''}
             `;
 
-            // Lógica de clic unificada en el contenedor principal
             item.addEventListener('click', (e) => {
-                // Si se hizo clic en el botón de cerrar
                 if (e.target.closest('.btn-close-tab')) {
                     closeTab(id);
                 } 
-                // Si se hizo clic en el botón de recargar
                 else if (e.target.closest('.btn-reload')) {
                     reloadTab(id);
                 } 
-                // Si se hizo clic en cualquier otra parte (nombre o punto)
                 else {
                     if (isOpen) {
                         switchToTab(id);
@@ -155,7 +151,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // --- Tab Management ---
-    const createTab = (serviceId, url, title) => {
+      const createTab = (serviceId, url, title) => {
         if (activeTabs.length >= config.maxActiveServices) {
             showStatus(`Limit reached (${config.maxActiveServices}). Close a tab first.`, 'warning');
             return;
@@ -166,21 +162,22 @@ document.addEventListener('DOMContentLoaded', () => {
         webview.src = url;
         webview.partition = `persist:${serviceId}`;
         webview.webpreferences = { sandbox: true, contextIsolation: true, nodeIntegration: false, webSecurity: true };
+        webview.style.display = 'none'; 
 
         elements.webviewsContainer.appendChild(webview);
         activeTabs.push({ id: serviceId, url, title, webview, zoomLevel: 0 });
         
         switchToTab(serviceId);
-        elements.welcomeScreen.style.display = 'none';
         window.electronAPI.setActiveService(serviceId);
-        renderSidebarServices(); // Update UI to show close/reload buttons
+        renderSidebarServices();
     };
 
     const switchToTab = (id) => {
         currentTabId = id;
         activeTabs.forEach(t => { t.webview.style.display = (t.id === id) ? 'flex' : 'none'; });
+        elements.welcomeScreen.style.display = 'none';
         window.electronAPI.setActiveService(id);
-        renderSidebarServices(); // Update active state in sidebar
+        renderSidebarServices();
     };
 
     const closeTab = (id) => {
