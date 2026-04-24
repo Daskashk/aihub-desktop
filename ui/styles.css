@@ -96,15 +96,20 @@ body {
 .service-launcher.active { background-color: var(--bg-tertiary); border-left: 2px solid var(--accent-color); padding-left: 6px; }
 
 .launcher-info {
-    display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; pointer-events: none;
+    display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0;
 }
 .service-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .service-name { font-size: 12px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .launcher-actions {
-    display: flex; gap: 2px; opacity: 0; transition: opacity 0.1s;
+    display: flex; gap: 2px; 
+    visibility: hidden;
+    opacity: 0; 
+    transition: opacity 0.2s, visibility 0.2s;
+.service-launcher:hover .launcher-actions { 
+    visibility: visible;
+    opacity: 1; 
 }
-.service-launcher:hover .launcher-actions { opacity: 1; }
 
 .btn-icon-xs {
     background: none; border: none; color: var(--text-secondary); cursor: pointer;
