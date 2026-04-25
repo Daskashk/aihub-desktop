@@ -1,7 +1,10 @@
 name: Build and Release Linux AppImage
 
 on:
-  workflow_dispatch: # Solo se ejecutará cuando lo actives manualmente
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -22,14 +25,12 @@ jobs:
       - name: Build AppImage
         run: npm run build:ci
 
-      # Extrae la versión de forma segura sin problemas de comillas
       - name: Get version from package.json
         id: pkg_version
         run: |
           PKG_VERSION=$(node -p "require('./package.json').version")
           echo "VERSION=$PKG_VERSION" >> $GITHUB_OUTPUT
 
-      # Crea el Release en GitHub y sube el AppImage
       - name: Create Release and Upload AppImage
         uses: softprops/action-gh-release@v1
         with:
