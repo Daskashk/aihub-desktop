@@ -1,6 +1,6 @@
 {
   "name": "aihub-desktop",
-  "version": "1.0.0",
+  "version": "0.1.0-beta",
   "description": "All-in-one AI assistants desktop app",
   "main": "main.js",
   "author": "Daskashk",

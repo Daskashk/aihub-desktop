@@ -1,10 +1,7 @@
-name: Build Linux AppImage
+name: Build and Release Linux AppImage
 
 on:
-  push:
-    branches:
-      - main
-  workflow_dispatch:
+  workflow_dispatch: # Solo se ejecutará cuando lo actives manualmente
 
 jobs:
   build:
@@ -25,8 +22,18 @@ jobs:
       - name: Build AppImage
         run: npm run build:ci
 
-      - name: Upload AppImage Artifact
-        uses: actions/upload-artifact@v3
+      # Extrae la versión de tu package.json para nombrar el Release y el archivo
+      - name: Get version from package.json
+        id: pkg_version
+        run: echo "VERSION=$(node -p "require('./package.json').version')" >> $GITHUB_OUTPUT
+
+      # Crea el Release en GitHub y sube el AppImage
+      - name: Create Release and Upload AppImage
+        uses: softprops/action-gh-release@v1
         with:
-          name: AI-Hub-Desktop-Linux
-          path: dist/*.AppImage
+          tag_name: v${{ steps.pkg_version.outputs.VERSION }}
+          name: Release v${{ steps.pkg_version.outputs.VERSION }}
+          body: "Nueva versión de AI Hub Desktop para Linux."
+          files: dist/*.AppImage
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Token automático de GitHub, no necesitas crearlo
