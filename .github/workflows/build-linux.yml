@@ -22,10 +22,12 @@ jobs:
       - name: Build AppImage
         run: npm run build:ci
 
-      # Extrae la versión de tu package.json para nombrar el Release y el archivo
+      # Extrae la versión de forma segura sin problemas de comillas
       - name: Get version from package.json
         id: pkg_version
-        run: echo "VERSION=$(node -p "require('./package.json').version')" >> $GITHUB_OUTPUT
+        run: |
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          echo "VERSION=$PKG_VERSION" >> $GITHUB_OUTPUT
 
       # Crea el Release en GitHub y sube el AppImage
       - name: Create Release and Upload AppImage
@@ -33,7 +35,7 @@ jobs:
         with:
           tag_name: v${{ steps.pkg_version.outputs.VERSION }}
           name: Release v${{ steps.pkg_version.outputs.VERSION }}
-          body: "Nueva versión de AI Hub Desktop para Linux."
+          body: "AI Hub Desktop New Version Release."
           files: dist/*.AppImage
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Token automático de GitHub, no necesitas crearlo
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
