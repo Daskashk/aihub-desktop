@@ -35,7 +35,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const showStatus = (message, type = 'info') => {
         elements.statusMessage.textContent = message;
         elements.statusMessage.className = `status-message ${type}`;
-        setTimeout(() => { elements.statusMessage.textContent = 'Ready'; elements.statusMessage.className = 'status-message'; }, 3000);
+        setTimeout(() => { elements.statusMessage.textContent = 'Ready'; elements.statusMessage.className = 'status-message'; }, 4000);
     };
     const formatDate = (isoString) => { if (!isoString) return 'Never'; return new Date(isoString).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }); };
     const generateId = (name) => name.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/g, '');
@@ -71,9 +71,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Rendering: Sidebar ---
     const renderSidebarServices = () => {
-        elements.servicesList.innerHTML = '';
         const enabledServices = allServices.filter(s => {
-            const id = s[5] || generateId(s[0]); // Support explicit ID
+            const id = s[5] || generateId(s[0]);
             return config.enabledServices.includes(id);
         });
 
@@ -82,50 +81,50 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        enabledServices.forEach(service => {
-            const [name, url, type, privacy, color, explicitId] = service;
-            const id = explicitId || generateId(name); // Support explicit ID
-            const bgColor = color ? `#${color}` : '#4285f4';
-            const isActive = id === currentTabId;
-            const isOpen = activeTabs.some(t => t.id === id);
+        const currentItems = elements.servicesList.querySelectorAll('.service-launcher');
+        if (currentItems.length !== enabledServices.length || elements.servicesList.querySelector('div[style]')) {
+            elements.servicesList.innerHTML = '';
+            enabledServices.forEach(service => {
+                const [name, url, type, privacy, color, explicitId] = service;
+                const id = explicitId || generateId(name);
+                const bgColor = color ? `#${color}` : '#4285f4';
+                const isOpen = activeTabs.some(t => t.id === id);
+                const isActive = id === currentTabId;
 
-            const item = document.createElement('div');
-            item.className = `service-launcher ${isActive ? 'active' : ''}`;
+                const item = document.createElement('div');
+                item.className = `service-launcher ${isActive ? 'active' : ''} ${isOpen ? 'is-open' : ''}`;
+                item.dataset.id = id;
 
-            let actionsHtml = '';
-            if (isOpen) {
-                actionsHtml = `
+                item.innerHTML = `
+                <div class="launcher-info">
+                <div class="service-dot" style="background-color: ${bgColor}"></div>
+                <div class="service-name">${name}</div>
+                </div>
                 <div class="launcher-actions">
                 <button class="btn-xs btn-reload" title="Reload">↻</button>
                 <button class="btn-xs btn-close" title="Close">✕</button>
                 </div>
                 `;
-            }
 
-            item.innerHTML = `
-            <div class="launcher-info">
-            <div class="service-dot" style="background-color: ${bgColor}"></div>
-            <div class="service-name">${name}</div>
-            </div>
-            ${actionsHtml}
-            `;
-
-            item.addEventListener('click', (e) => {
-                if (e.target.closest('.btn-close')) {
-                    closeTab(id);
-                } else if (e.target.closest('.btn-reload')) {
-                    reloadTab(id);
-                } else {
-                    if (isOpen) {
-                        switchToTab(id);
-                    } else {
-                        createTab(id, url, name);
+                item.addEventListener('click', (e) => {
+                    if (e.target.closest('.btn-close')) closeTab(id);
+                    else if (e.target.closest('.btn-reload')) reloadTab(id);
+                    else {
+                        if (isOpen) switchToTab(id);
+                        else createTab(id, url, name);
                     }
-                }
-            });
+                });
 
-            elements.servicesList.appendChild(item);
-        });
+                elements.servicesList.appendChild(item);
+            });
+        } else {
+            currentItems.forEach(item => {
+                const id = item.dataset.id;
+                const isOpen = activeTabs.some(t => t.id === id);
+                const isActive = id === currentTabId;
+                item.className = `service-launcher ${isActive ? 'active' : ''} ${isOpen ? 'is-open' : ''}`;
+            });
+        }
     };
 
     // --- Rendering: Settings ---
@@ -133,7 +132,7 @@ document.addEventListener('DOMContentLoaded', () => {
         elements.allServicesList.innerHTML = '';
         allServices.forEach(service => {
             const [name, url, type, privacy, color, explicitId] = service;
-            const id = explicitId || generateId(name); // Support explicit ID
+            const id = explicitId || generateId(name);
             const bgColor = color ? `#${color}` : '#4285f4';
             const isEnabled = config.enabledServices.includes(id);
 
@@ -166,12 +165,14 @@ document.addEventListener('DOMContentLoaded', () => {
         webview.dataset.id = serviceId;
         webview.src = url;
         webview.partition = `persist:${serviceId}`;
+
         webview.webpreferences = {
             sandbox: true,
             contextIsolation: true,
             nodeIntegration: false,
             webSecurity: true,
-            allowPopups: true
+            allowPopups: true,
+            darkTheme: config.darkMode
         };
         webview.style.display = 'none';
 
@@ -211,83 +212,68 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const reloadTab = (id) => {
         const tab = activeTabs.find(t => t.id === id);
-        if (tab) {
-            tab.webview.reload();
-            showStatus(`Reloading ${tab.title}...`, 'info');
-        }
+        if (tab) { tab.webview.reload(); showStatus(`Reloading ${tab.title}...`, 'info'); }
     };
 
     // --- Zoom Management ---
-    const applyZoom = (id, level) => {
-        const tab = activeTabs.find(t => t.id === id);
-        if (tab) {
-            tab.zoomLevel = level;
-            tab.webview.setZoomLevel(level);
-        }
+    const applyZoom = (id, level) => { const tab = activeTabs.find(t => t.id === id); if (tab) { tab.zoomLevel = level; tab.webview.setZoomLevel(level); } };
+    const zoomIn = () => { if (!currentTabId) return; const tab = activeTabs.find(t => t.id === currentTabId); if (tab) applyZoom(currentTabId, Math.min(tab.zoomLevel + 0.5, 5)); };
+    const zoomOut = () => { if (!currentTabId) return; const tab = activeTabs.find(t => t.id === currentTabId); if (tab) applyZoom(currentTabId, Math.max(tab.zoomLevel - 0.5, -5)); };
+
+    // --- Settings Management ---
+    const saveSettings = async () => {
+        const newConfig = { blockingEnabled: elements.toggleBlocking.checked, maxActiveServices: parseInt(elements.maxServicesInput.value) || 3, darkMode: elements.toggleDarkMode.checked };
+        try {
+            config = await window.electronAPI.saveConfig(newConfig);
+            showStatus('Settings saved', 'success');
+            updateBlockingUI(config.blockingEnabled);
+            applyDarkMode(config.darkMode);
+            elements.settingsPanel.classList.add('hidden');
+        } catch (error) { showStatus('Error saving settings', 'error'); }
     };
 
-    const zoomIn = () => {
-        if (!currentTabId) return;
-        const tab = activeTabs.find(t => t.id === currentTabId);
-        if (tab) applyZoom(currentTabId, Math.min(tab.zoomLevel + 0.5, 5));
-    };
+    // --- Event Listeners ---
+    elements.toggleSidebarBtn.addEventListener('click', () => elements.sidebar.classList.toggle('hidden'));
+    elements.btnSettings.addEventListener('click', () => { renderSettingsServices(); elements.settingsPanel.classList.remove('hidden'); });
+    elements.btnCloseSettings.addEventListener('click', () => elements.settingsPanel.classList.add('hidden'));
+    elements.btnSaveSettings.addEventListener('click', saveSettings);
 
-        const zoomOut = () => {
-            if (!currentTabId) return;
-            const tab = activeTabs.find(t => t.id === currentTabId);
-            if (tab) applyZoom(currentTabId, Math.max(tab.zoomLevel - 0.5, -5));
-        };
+    elements.btnZoomIn.addEventListener('click', zoomIn);
+    elements.btnZoomOut.addEventListener('click', zoomOut);
 
-            // --- Settings Management ---
-            const saveSettings = async () => {
-                const newConfig = { blockingEnabled: elements.toggleBlocking.checked, maxActiveServices: parseInt(elements.maxServicesInput.value) || 3, darkMode: elements.toggleDarkMode.checked };
-                try {
-                    config = await window.electronAPI.saveConfig(newConfig);
-                    showStatus('Settings saved', 'success');
-                    updateBlockingUI(config.blockingEnabled);
-                    applyDarkMode(config.darkMode);
-                    elements.settingsPanel.classList.add('hidden');
-                } catch (error) { showStatus('Error saving settings', 'error'); }
-            };
+    elements.btnUpdate.addEventListener('click', async () => {
+        showStatus('Checking for updates...', 'info');
+        try {
+            const result = await window.electronAPI.updateRemoteData();
+            if (result.success) {
+                if (result.updated) {
+                    await loadServices();
+                    config.lastUpdate = new Date().toISOString();
+                    elements.lastUpdate.textContent = formatDate(config.lastUpdate);
+                    showStatus('Lists updated successfully!', 'success');
+                } else {
+                    showStatus('Already up to date.', 'info');
+                }
+            } else { showStatus('Update failed: ' + result.error, 'error'); }
+        } catch (error) { showStatus('Update failed', 'error'); }
+    });
 
-            // --- Event Listeners ---
-            elements.toggleSidebarBtn.addEventListener('click', () => elements.sidebar.classList.toggle('hidden'));
-            elements.btnSettings.addEventListener('click', () => { renderSettingsServices(); elements.settingsPanel.classList.remove('hidden'); });
-            elements.btnCloseSettings.addEventListener('click', () => elements.settingsPanel.classList.add('hidden'));
-            elements.btnSaveSettings.addEventListener('click', saveSettings);
+    elements.modalTabs.forEach(tab => {
+        tab.addEventListener('click', (e) => {
+            elements.modalTabs.forEach(t => t.classList.remove('active'));
+            elements.tabContents.forEach(c => c.classList.remove('active'));
+            e.target.classList.add('active');
+            document.getElementById(`tab-${e.target.dataset.tab}`).classList.add('active');
+        });
+    });
 
-            elements.btnZoomIn.addEventListener('click', zoomIn);
-            elements.btnZoomOut.addEventListener('click', zoomOut);
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') elements.settingsPanel.classList.add('hidden');
+        if (e.ctrlKey && e.key === '=') { e.preventDefault(); zoomIn(); }
+        if (e.ctrlKey && e.key === '-') { e.preventDefault(); zoomOut(); }
+    });
 
-            elements.btnUpdate.addEventListener('click', async () => {
-                showStatus('Updating services...', 'info');
-                try {
-                    const result = await window.electronAPI.updateRemoteData();
-                    if (result.success) {
-                        await loadServices();
-                        config.lastUpdate = new Date().toISOString();
-                        elements.lastUpdate.textContent = formatDate(config.lastUpdate);
-                        showStatus('Update successful', 'success');
-                    } else { showStatus('Update failed: ' + result.error, 'error'); }
-                } catch (error) { showStatus('Update failed', 'error'); }
-            });
-
-            elements.modalTabs.forEach(tab => {
-                tab.addEventListener('click', (e) => {
-                    elements.modalTabs.forEach(t => t.classList.remove('active'));
-                    elements.tabContents.forEach(c => c.classList.remove('active'));
-                    e.target.classList.add('active');
-                    document.getElementById(`tab-${e.target.dataset.tab}`).classList.add('active');
-                });
-            });
-
-            document.addEventListener('keydown', (e) => {
-                if (e.key === 'Escape') elements.settingsPanel.classList.add('hidden');
-                if (e.ctrlKey && e.key === '=') { e.preventDefault(); zoomIn(); }
-                if (e.ctrlKey && e.key === '-') { e.preventDefault(); zoomOut(); }
-            });
-
-            // --- Initialization ---
-            const init = async () => { await loadConfig(); await loadServices(); };
-            init();
+    // --- Initialization ---
+    const init = async () => { await loadConfig(); await loadServices(); };
+    init();
 });

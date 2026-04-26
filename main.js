@@ -29,6 +29,7 @@ let config = {...defaultConfig};
 let commonAuthDomains = new Set();
 let rulesCache = null;
 const initializedSessions = new Set();
+let mainWindow = null;
 
 // ==========================================
 // CONFIGURATION MANAGEMENT
@@ -39,11 +40,7 @@ function loadConfig() {
     if (fs.existsSync(configPath)) {
       const data = fs.readFileSync(configPath, 'utf8');
       const savedConfig = JSON.parse(data);
-      config = {
-        ...defaultConfig,
-        ...savedConfig,
-        enabledServices: savedConfig.enabledServices || defaultConfig.enabledServices
-      };
+      config = { ...defaultConfig, ...savedConfig, enabledServices: savedConfig.enabledServices || defaultConfig.enabledServices };
     }
     saveConfig();
     console.log('[Config] Loaded successfully');
@@ -85,28 +82,44 @@ async function updateRemoteData() {
   try {
     if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 
-    console.log("[Update] Downloading services...");
-    const servicesData = await fetchUrl(config.remoteUrls.services);
-    fs.writeFileSync(servicesPath, servicesData);
+    let updated = false;
 
-    console.log("[Update] Downloading rules...");
-    const rulesData = await fetchUrl(config.remoteUrls.rules);
-    fs.writeFileSync(rulesPath, rulesData);
+    console.log("[Update] Checking services list...");
+    const remoteServicesData = await fetchUrl(config.remoteUrls.services);
+    const localServicesData = fs.existsSync(servicesPath) ? fs.readFileSync(servicesPath, 'utf8') : null;
 
-    rulesCache = null;
-    config.lastUpdate = new Date().toISOString();
-    saveConfig();
+    if (remoteServicesData !== localServicesData) {
+      fs.writeFileSync(servicesPath, remoteServicesData);
+      updated = true;
+      console.log("[Update] Services list UPDATED.");
+    } else {
+      console.log("[Update] Services list unchanged.");
+    }
 
-    loadRules();
+    console.log("[Update] Checking blocking rules...");
+    const remoteRulesData = await fetchUrl(config.remoteUrls.rules);
+    const localRulesData = fs.existsSync(rulesPath) ? fs.readFileSync(rulesPath, 'utf8') : null;
 
-    // Re-setup all sessions with new rules
-    initializedSessions.clear();
+    if (remoteRulesData !== localRulesData) {
+      fs.writeFileSync(rulesPath, remoteRulesData);
+      rulesCache = null;
+      initializedSessions.clear();
+      updated = true;
+      console.log("[Update] Rules UPDATED.");
+    } else {
+      console.log("[Update] Rules unchanged.");
+    }
 
-    console.log("[Update] Completed successfully");
-    return { success: true };
+    if (updated) {
+      config.lastUpdate = new Date().toISOString();
+      saveConfig();
+      loadRules();
+    }
+
+    return { success: true, updated: updated };
   } catch (error) {
     console.error('[Update] Error:', error);
-    return { success: false, error: error.message };
+    return { success: false, error: error.message, updated: false };
   }
 }
 
@@ -117,9 +130,7 @@ function loadServices() {
       if (!data) return null;
       return JSON.parse(data);
     }
-  } catch (error) {
-    console.error('[Services] Error loading:', error);
-  }
+  } catch (error) { console.error('[Services] Error loading:', error); }
   return null;
 }
 
@@ -131,43 +142,28 @@ function loadRules() {
       if (!data) return null;
       const rules = JSON.parse(data);
       rulesCache = rules;
-
-      if (rules.common_auth_domains) {
-        commonAuthDomains = new Set(rules.common_auth_domains);
-        console.log(`[Rules] Loaded ${commonAuthDomains.size} common auth domains`);
-      }
-      if (rules.service_domains) {
-        const serviceCount = Object.keys(rules.service_domains).length;
-        console.log(`[Rules] Loaded domains for ${serviceCount} services`);
-      }
+      if (rules.common_auth_domains) commonAuthDomains = new Set(rules.common_auth_domains);
+      if (rules.service_domains) console.log(`[Rules] Loaded domains for ${Object.keys(rules.service_domains).length} services`);
       return rules;
     }
-  } catch (error) {
-    console.error('[Rules] Error loading:', error);
-  }
+  } catch (error) { console.error('[Rules] Error loading:', error); }
   return null;
 }
 
 // ==========================================
-// DOMAIN BLOCKING LOGIC (STRICT - MATCHES JSON KEYS EXACTLY)
+// DOMAIN BLOCKING LOGIC
 // ==========================================
 
 function isDomainAllowed(hostname, serviceDomains) {
   if (!config.blockingEnabled) return true;
-
-  // Always allow common auth domains
   for (const domain of commonAuthDomains) {
     if (hostname === domain || hostname.endsWith('.' + domain)) return true;
   }
-
-  // Check service-specific whitelist
   if (serviceDomains && serviceDomains.length > 0) {
     for (const domain of serviceDomains) {
       if (hostname === domain || hostname.endsWith('.' + domain)) return true;
     }
   }
-
-  // If blocking is on, and it's not in the lists -> BLOCK
   return false;
 }
 
@@ -183,39 +179,27 @@ function setupSessionBlocking(serviceId) {
     try {
       const url = new URL(details.url);
       const hostname = url.hostname;
+      if (details.url.startsWith('devtools://') || details.url.startsWith('file://') || details.url.startsWith('chrome-extension://')) return callback({});
 
-      // Allow local/electron resources
-      if (details.url.startsWith('devtools://') || details.url.startsWith('file://') || details.url.startsWith('chrome-extension://')) {
-        return callback({});
-      }
+        const rules = loadRules();
+        let serviceDomains = [];
+        if (rules && rules.service_domains && rules.service_domains[serviceId]) serviceDomains = rules.service_domains[serviceId];
 
-      const rules = loadRules();
-      let serviceDomains = [];
-
-      // EXACT MATCH: The serviceId must exactly match the key in the JSON rules
-      if (rules && rules.service_domains && rules.service_domains[serviceId]) {
-        serviceDomains = rules.service_domains[serviceId];
-      }
-
-      // SAFEGUARD: If blocking is enabled but NO rules exist at all, allow everything
-      if (config.blockingEnabled && !rules) {
-        console.warn(`[Blocker] No rules loaded for ${serviceId}, allowing all requests. Run Update first!`);
-        return callback({});
-      }
-
-      if (isDomainAllowed(hostname, serviceDomains)) {
-        callback({}); // Allow
-      } else {
-        console.log(`[Blocker] Blocked: ${hostname} (Service: ${serviceId})`);
-        callback({ cancel: true }); // Block
-      }
-    } catch (e) {
-      console.error('[Blocker] Error:', e);
-      callback({}); // On error, allow
-    }
+        if (config.blockingEnabled && !rules) return callback({});
+        if (isDomainAllowed(hostname, serviceDomains)) callback({});
+        else callback({ cancel: true });
+    } catch (e) { callback({}); }
   });
+}
 
-  console.log(`[Blocker] Session setup for: ${partitionName}`);
+function warmupSessions() {
+  if (!config.enabledServices) return;
+  config.enabledServices.forEach(serviceId => {
+    const partitionName = `persist:${serviceId}`;
+    const ses = session.fromPartition(partitionName);
+    ses.cookies.get({}).catch(() => {});
+  });
+  console.log('[Performance] Session warmup completed');
 }
 
 // ==========================================
@@ -223,32 +207,14 @@ function setupSessionBlocking(serviceId) {
 // ==========================================
 
 function createMainWindow() {
-  const mainWindow = new BrowserWindow({
-    width: 1200,
-    height: 800,
-    minWidth: 800,
-    minHeight: 600,
-    title: 'AI Hub Desktop',
-    backgroundColor: '#1a1b1e',
-    autoHideMenuBar: true,
-    webPreferences: {
-      nodeIntegration: false,
-      contextIsolation: true,
-      sandbox: true,
-      webviewTag: true,
-      preload: path.join(__dirname, 'preload.js')
-    }
+  mainWindow = new BrowserWindow({
+    width: 1200, height: 800, minWidth: 800, minHeight: 600,
+    title: 'AI Hub Desktop', backgroundColor: '#ffffff', autoHideMenuBar: true,
+    webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true, webviewTag: true, preload: path.join(__dirname, 'preload.js') }
   });
 
   mainWindow.loadFile(path.join(__dirname, 'ui', 'index.html'));
-
-  // Open DevTools with F12
-  mainWindow.webContents.on('before-input-event', (event, input) => {
-    if (input.key === 'F12') {
-      mainWindow.webContents.toggleDevTools();
-    }
-  });
-
+  mainWindow.webContents.on('before-input-event', (event, input) => { if (input.key === 'F12') mainWindow.webContents.toggleDevTools(); });
   mainWindow.on('closed', () => { mainWindow = null; });
   return mainWindow;
 }
@@ -263,9 +229,7 @@ ipcMain.handle('get-rules', () => loadRules());
 ipcMain.handle('update-remote-data', async () => await updateRemoteData());
 
 ipcMain.handle('save-config', (event, newConfig) => {
-  if (newConfig.enabledServices) {
-    config.enabledServices = [...new Set(newConfig.enabledServices)];
-  }
+  if (newConfig.enabledServices) config.enabledServices = [...new Set(newConfig.enabledServices)];
   config = { ...config, ...newConfig };
   saveConfig();
   return config;
@@ -273,11 +237,8 @@ ipcMain.handle('save-config', (event, newConfig) => {
 
 ipcMain.handle('toggle-service', (event, serviceId) => {
   const index = config.enabledServices.indexOf(serviceId);
-  if (index === -1) {
-    config.enabledServices.push(serviceId);
-  } else {
-    config.enabledServices.splice(index, 1);
-  }
+  if (index === -1) config.enabledServices.push(serviceId);
+  else config.enabledServices.splice(index, 1);
   saveConfig();
   return config.enabledServices;
 });
@@ -291,20 +252,6 @@ ipcMain.on('set-active-service', (event, serviceId) => {
 // APP LIFECYCLE
 // ==========================================
 
-app.whenReady().then(() => {
-  loadConfig();
-  loadRules();
-  createMainWindow();
-});
-
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
-});
-
-app.on('will-quit', () => {
-  for (const partitionName of initializedSessions) {
-    const ses = session.fromPartition(partitionName);
-    if (ses) ses.webRequest.onBeforeRequest(null);
-  }
-  initializedSessions.clear();
-});
+app.whenReady().then(() => { loadConfig(); loadRules(); warmupSessions(); createMainWindow(); });
+app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
+app.on('will-quit', () => { for (const p of initializedSessions) { const s = session.fromPartition(p); if(s) s.webRequest.onBeforeRequest(null); } initializedSessions.clear(); });
