@@ -24,15 +24,14 @@ document.addEventListener('DOMContentLoaded', () => {
                           btnClearData: document.getElementById('btn-clear-data'),
                           clearDataModal: document.getElementById('clear-data-modal'),
                           btnCancelClear: document.getElementById('btn-cancel-clear'),
-                          btnConfirmClear: document.getElementById('btn-confirm-clear')
+                          btnConfirmClear: document.getElementById('btn-confirm-clear'),
+                          btnReloadPage: document.getElementById('btn-reload-page')
     };
 
     let config = { enabledServices: [], blockingEnabled: true, maxActiveServices: 3, darkMode: true, lastUpdate: null };
     let allServices = [];
     let activeTabs = [];
     let currentTabId = null;
-
-    const CHROME_UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
     const formatDate = (isoString) => { if (!isoString) return 'Never'; return new Date(isoString).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }); };
     const generateId = (name) => name.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/g, '');
@@ -136,7 +135,6 @@ document.addEventListener('DOMContentLoaded', () => {
         webview.dataset.id = serviceId;
         webview.src = url;
         webview.partition = `persist:${serviceId}`;
-        webview.setAttribute('useragent', CHROME_UA);
         webview.webpreferences = { sandbox: true, contextIsolation: true, nodeIntegration: false, webSecurity: true, allowPopups: true, darkTheme: config.darkMode };
         webview.style.display = 'none';
         elements.webviewsContainer.appendChild(webview);
@@ -177,6 +175,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     elements.btnZoomIn.addEventListener('click', zoomIn);
     elements.btnZoomOut.addEventListener('click', zoomOut);
+    elements.btnReloadPage.addEventListener('click', () => { if (currentTabId) reloadTab(currentTabId); });
 
     elements.btnUpdate.addEventListener('click', async () => {
         elements.blockingIndicator.className = 'indicator';
