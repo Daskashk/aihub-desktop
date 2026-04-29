@@ -1,5 +1,5 @@
 // main.js - Main Process
-const { app, BrowserWindow, ipcMain, session } = require('electron');
+const { app, BrowserWindow, ipcMain, session, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const https = require('https');
@@ -164,7 +164,9 @@ function createMainWindow() {
     webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true, webviewTag: true, preload: path.join(__dirname, 'preload.js') }
   });
   mainWindow.loadFile(path.join(__dirname, 'ui', 'index.html'));
-  mainWindow.webContents.on('before-input-event', (event, input) => { if (input.key === 'F12') mainWindow.webContents.toggleDevTools(); });
+  if (process.env.NODE_ENV === 'development') {
+    mainWindow.webContents.on('before-input-event', (event, input) => { if (input.key === 'F12') mainWindow.webContents.toggleDevTools(); });
+  }
   mainWindow.on('closed', () => { mainWindow = null; });
 }
 
@@ -174,13 +176,17 @@ ipcMain.handle('get-rules', () => loadRules());
 ipcMain.handle('update-remote-data', async () => await updateRemoteData());
 
 ipcMain.handle('save-config', (event, newConfig) => {
+  const allowedKeys = ['blockingEnabled', 'maxActiveServices', 'darkMode'];
   if (newConfig.enabledServices) config.enabledServices = [...new Set(newConfig.enabledServices)];
-  config = { ...config, ...newConfig };
+  for (const key of allowedKeys) {
+    if (key in newConfig) config[key] = newConfig[key];
+  }
   saveConfig();
   return config;
 });
 
 ipcMain.handle('toggle-service', (event, serviceId) => {
+  if (typeof serviceId !== 'string' || !/^[a-z0-9]+$/.test(serviceId)) return config.enabledServices;
   const index = config.enabledServices.indexOf(serviceId);
   if (index === -1) config.enabledServices.push(serviceId);
   else config.enabledServices.splice(index, 1);
@@ -194,6 +200,7 @@ ipcMain.on('set-active-service', (event, serviceId) => {
 });
 
 ipcMain.handle('clear-service-data', async (event, serviceId) => {
+  if (typeof serviceId !== 'string' || !/^[a-z0-9]+$/.test(serviceId)) return { success: false, error: 'Invalid service ID' };
   try {
     const partitionName = `persist:${serviceId}`;
     const ses = session.fromPartition(partitionName);
@@ -204,7 +211,23 @@ ipcMain.handle('clear-service-data', async (event, serviceId) => {
     return { success: true };
   } catch (error) {
     console.error('[ClearData] Error:', error);
-    return { success: false, error: error.message };
+    return { success: false, error: 'Failed to clear service data' };
+  }
+});
+
+// Open URL in the default system browser
+ipcMain.handle('open-in-browser', async (event, url) => {
+  try {
+    // Validate that the URL is a valid http/https URL to prevent security issues
+    const parsedUrl = new URL(url);
+    if (parsedUrl.protocol !== 'https:' && parsedUrl.protocol !== 'http:') {
+      return { success: false, error: 'Only http and https URLs are allowed' };
+    }
+    await shell.openExternal(url);
+    return { success: true };
+  } catch (error) {
+    console.error('[OpenInBrowser] Error:', error);
+    return { success: false, error: 'Failed to open URL in browser' };
   }
 });
 

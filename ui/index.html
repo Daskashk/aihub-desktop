@@ -30,6 +30,9 @@
                 <button id="btn-zoom-in" class="btn btn-icon" title="Zoom In">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                 </button>
+                <button id="btn-open-browser" class="btn btn-icon" title="Open in Browser">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                </button>
                 <button id="btn-reload-page" class="btn btn-icon" title="Reload Current Page">↻</button>
                 <button id="btn-clear-data" class="btn btn-icon" title="Clear Site Data">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
@@ -61,16 +64,117 @@
                 <div class="modal-tabs">
                     <button class="modal-tab active" data-tab="general">General</button>
                     <button class="modal-tab" data-tab="services">Manage Services</button>
+                    <button class="modal-tab" data-tab="about">About</button>
                 </div>
                 <div class="modal-body">
                     <div id="tab-general" class="tab-content active">
-                        <div class="setting-group"><label class="setting-label"><input type="checkbox" id="toggle-blocking" checked><span>Enable Domain Blocking</span></label><small class="setting-hint">Blocks connections to non-whitelisted domains.</small></div>
-                        <div class="setting-group"><label class="setting-label" for="max-services">Active Services Limit</label><input type="number" id="max-services" min="1" max="10" value="3" class="input-field"><small class="setting-hint">Limits RAM usage by restricting concurrent services.</small></div>
-                        <div class="setting-group"><label class="setting-label"><input type="checkbox" id="toggle-dark-mode" checked><span>Dark Mode</span></label></div>
-                        <div class="setting-group"><div class="info-box"><p><strong>Last Updated:</strong> <span id="last-update">Never</span></p></div></div>
-                        <div class="setting-actions"><button id="btn-save-settings" class="btn btn-primary">Save Changes</button></div>
+                        <div class="setting-group">
+                            <div class="setting-row">
+                                <div class="setting-text">
+                                    <div class="setting-title">Domain Blocking</div>
+                                    <div class="setting-description">Block connections to non-whitelisted domains for enhanced privacy</div>
+                                </div>
+                                <label class="toggle-switch material-toggle">
+                                    <input type="checkbox" id="toggle-blocking" checked>
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="setting-group">
+                            <div class="setting-row">
+                                <div class="setting-text">
+                                    <div class="setting-title">Active Services Limit</div>
+                                    <div class="setting-description">Maximum number of concurrent services to limit RAM usage</div>
+                                </div>
+                                <div class="setting-control">
+                                    <input type="number" id="max-services" min="1" max="10" value="3" class="input-field modern-input">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="setting-group">
+                            <div class="setting-row">
+                                <div class="setting-text">
+                                    <div class="setting-title">Dark Mode</div>
+                                    <div class="setting-description">Switch between light and dark theme</div>
+                                </div>
+                                <label class="toggle-switch material-toggle">
+                                    <input type="checkbox" id="toggle-dark-mode" checked>
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="setting-divider"></div>
+                        <div class="setting-group">
+                            <div class="setting-row">
+                                <div class="setting-text">
+                                    <div class="setting-title">Last Updated</div>
+                                    <div class="setting-description" id="last-update">Never</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="setting-actions">
+                            <button id="btn-save-settings" class="btn btn-primary btn-modern">Save Changes</button>
+                        </div>
                     </div>
-                    <div id="tab-services" class="tab-content"><div id="all-services-list" class="services-manager"></div></div>
+                    <div id="tab-services" class="tab-content">
+                        <div id="all-services-list" class="services-manager"></div>
+                    </div>
+                    <div id="tab-about" class="tab-content">
+                        <div class="about-content">
+                            <div class="about-logo">
+                                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--accent-color)" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M8 12h8M12 8v8"/></svg>
+                            </div>
+                            <h2 class="about-title">AI Hub Desktop</h2>
+                            <p class="about-version">v0.3.1-beta</p>
+                            <p class="about-description">All-in-one AI assistants desktop application</p>
+
+                            <div class="about-divider"></div>
+
+                            <div class="about-section">
+                                <h3 class="about-section-title">Credits</h3>
+                                <div class="about-link-item">
+                                    <div class="about-link-text">
+                                        <div class="about-link-title">AI Hub Android App</div>
+                                        <div class="about-link-desc">Original Android application by SilentCoder</div>
+                                    </div>
+                                    <a href="#" class="about-link-btn" data-url="https://github.com/SilentCoderHere/aihub">Repository</a>
+                                </div>
+                                <div class="about-link-item">
+                                    <div class="about-link-text">
+                                        <div class="about-link-title">AI Hub Desktop</div>
+                                        <div class="about-link-desc">Desktop port by Daskashk</div>
+                                    </div>
+                                    <a href="#" class="about-link-btn" data-url="https://github.com/Daskashk/aihub-desktop">Repository</a>
+                                </div>
+                            </div>
+
+                            <div class="about-divider"></div>
+
+                            <div class="about-section">
+                                <h3 class="about-section-title">Community</h3>
+                                <div class="about-link-item">
+                                    <div class="about-link-text">
+                                        <div class="about-link-title">AI Hub Matrix Group</div>
+                                        <div class="about-link-desc">Official AI Hub community on Matrix</div>
+                                    </div>
+                                    <a href="#" class="about-link-btn" data-url="https://matrix.to/#/#aihub-silentcoder:matrix.org">Join</a>
+                                </div>
+                                <div class="about-link-item">
+                                    <div class="about-link-text">
+                                        <div class="about-link-title">Topic Guild Matrix Group</div>
+                                        <div class="about-link-desc">Daskashk's community on Matrix</div>
+                                    </div>
+                                    <a href="#" class="about-link-btn" data-url="https://matrix.to/#/#topic-guild:matrix.org">Join</a>
+                                </div>
+                            </div>
+
+                            <div class="about-divider"></div>
+
+                            <div class="about-footer">
+                                <p>Licensed under GPL-3.0</p>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

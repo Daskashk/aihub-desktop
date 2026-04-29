@@ -8,5 +8,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
                                 updateRemoteData: () => ipcRenderer.invoke('update-remote-data'),
                                 toggleService: (serviceId) => ipcRenderer.invoke('toggle-service', serviceId),
                                 setActiveService: (serviceId) => ipcRenderer.send('set-active-service', serviceId),
-                                clearServiceData: (serviceId) => ipcRenderer.invoke('clear-service-data', serviceId)
+                                clearServiceData: (serviceId) => ipcRenderer.invoke('clear-service-data', serviceId),
+                                openInBrowser: (url) => ipcRenderer.invoke('open-in-browser', url)
 });

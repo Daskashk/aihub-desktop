@@ -19,6 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
                           tabContents: document.querySelectorAll('.tab-content'),
                           btnZoomIn: document.getElementById('btn-zoom-in'),
                           btnZoomOut: document.getElementById('btn-zoom-out'),
+                          btnOpenBrowser: document.getElementById('btn-open-browser'),
                           blockingIndicator: document.getElementById('blocking-indicator'),
                           blockingText: document.getElementById('blocking-text'),
                           btnClearData: document.getElementById('btn-clear-data'),
@@ -43,7 +44,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const sanitizeColor = (color) => {
         if (!color) return '#4285f4';
-        return /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{4}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$/.test(color) ? `#${color}` : '#4285f4';
+        // Strip optional leading # then validate the hex portion
+        const hex = color.replace(/^#/, '');
+        return /^[0-9A-Fa-f]{3}$|^[0-9A-Fa-f]{4}$|^[0-9A-Fa-f]{6}$|^[0-9A-Fa-f]{8}$/.test(hex) ? `#${hex}` : '#4285f4';
+    };
+
+    // Get privacy badge HTML based on the privacy tag from the service data
+    const getPrivacyBadge = (privacy) => {
+        if (!privacy) return '';
+        const normalized = privacy.toLowerCase().trim();
+        if (normalized === 'privacy focused') {
+            return `<span class="privacy-badge privacy-focused">Privacy Focused</span>`;
+        } else if (normalized === 'privacy friendly') {
+            return `<span class="privacy-badge privacy-friendly">Privacy Friendly</span>`;
+        } else if (normalized === 'not for privacy') {
+            return `<span class="privacy-badge not-for-privacy">Not for Privacy</span>`;
+        }
+        return '';
     };
 
     const updateBlockingUI = (enabled) => {
@@ -118,14 +135,41 @@ document.addEventListener('DOMContentLoaded', () => {
             const id = explicitId || generateId(name);
             const bgColor = sanitizeColor(color);
             const isEnabled = config.enabledServices.includes(id);
+            const privacyBadgeHtml = getPrivacyBadge(privacy);
             const item = document.createElement('div');
             item.className = 'service-setting-item';
-            item.innerHTML = `<div class="service-info"><div class="service-dot" style="background-color: ${bgColor}"></div><div class="service-info-name">${escapeHtml(name)}</div></div><label class="toggle-switch"><input type="checkbox" ${isEnabled ? 'checked' : ''} data-service-id="${id}"><span class="toggle-slider"></span></label>`;
+            item.innerHTML = `
+            <div class="service-info">
+            <div class="service-dot" style="background-color: ${bgColor}"></div>
+            <div class="service-info-details">
+            <div class="service-info-name">${escapeHtml(name)}</div>
+            ${privacyBadgeHtml ? `<div class="service-info-badges">${privacyBadgeHtml}</div>` : ''}
+            </div>
+            </div>
+            <label class="toggle-switch material-toggle">
+            <input type="checkbox" ${isEnabled ? 'checked' : ''} data-service-id="${id}">
+            <span class="toggle-slider"></span>
+            </label>`;
             item.querySelector('input').addEventListener('change', async (e) => {
                 const serviceId = e.target.dataset.serviceId;
                 try { config.enabledServices = await window.electronAPI.toggleService(serviceId); renderSidebarServices(); } catch (error) { e.target.checked = !e.target.checked; }
             });
             elements.allServicesList.appendChild(item);
+        });
+    };
+
+    // Setup webview event listeners for opening external links in default browser
+    const setupWebviewListeners = (webview) => {
+        // Intercept new-window events to open external links in the default browser
+        webview.addEventListener('new-window', async (e) => {
+            e.preventDefault();
+            if (e.url && (e.url.startsWith('http://') || e.url.startsWith('https://'))) {
+                try {
+                    await window.electronAPI.openInBrowser(e.url);
+                } catch (error) {
+                    console.error('[Webview] Failed to open URL in browser:', error);
+                }
+            }
         });
     };
 
@@ -135,9 +179,13 @@ document.addEventListener('DOMContentLoaded', () => {
         webview.dataset.id = serviceId;
         webview.src = url;
         webview.partition = `persist:${serviceId}`;
-        webview.webpreferences = { sandbox: true, contextIsolation: true, nodeIntegration: false, webSecurity: true, allowPopups: true, darkTheme: config.darkMode };
+        webview.webpreferences = { sandbox: true, contextIsolation: true, nodeIntegration: false, webSecurity: true, allowPopups: false, darkTheme: config.darkMode };
         webview.style.display = 'none';
         elements.webviewsContainer.appendChild(webview);
+
+        // Setup listeners for external link handling
+        setupWebviewListeners(webview);
+
         activeTabs.push({ id: serviceId, url, title, webview, zoomLevel: 0 });
         switchToTab(serviceId); window.electronAPI.setActiveService(serviceId); renderSidebarServices();
     };
@@ -165,6 +213,23 @@ document.addEventListener('DOMContentLoaded', () => {
     const zoomIn = () => { if (!currentTabId) return; const tab = activeTabs.find(t => t.id === currentTabId); if (tab) applyZoom(currentTabId, Math.min(tab.zoomLevel + 0.5, 5)); };
     const zoomOut = () => { if (!currentTabId) return; const tab = activeTabs.find(t => t.id === currentTabId); if (tab) applyZoom(currentTabId, Math.max(tab.zoomLevel - 0.5, -5)); };
 
+    // Open current service in default browser
+    const openInBrowser = async () => {
+        if (!currentTabId) return;
+        const tab = activeTabs.find(t => t.id === currentTabId);
+        if (tab) {
+            try {
+                // Get the current URL from the webview, fall back to the original URL
+                const currentUrl = tab.webview.src || tab.url;
+                if (currentUrl && currentUrl !== 'about:blank') {
+                    await window.electronAPI.openInBrowser(currentUrl);
+                }
+            } catch (error) {
+                console.error('[OpenInBrowser] Failed:', error);
+            }
+        }
+    };
+
     elements.toggleSidebarBtn.addEventListener('click', () => elements.sidebar.classList.toggle('hidden'));
     elements.btnSettings.addEventListener('click', () => { renderSettingsServices(); elements.settingsPanel.classList.remove('hidden'); });
     elements.btnCloseSettings.addEventListener('click', () => elements.settingsPanel.classList.add('hidden'));
@@ -175,6 +240,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     elements.btnZoomIn.addEventListener('click', zoomIn);
     elements.btnZoomOut.addEventListener('click', zoomOut);
+    elements.btnOpenBrowser.addEventListener('click', openInBrowser);
     elements.btnReloadPage.addEventListener('click', () => { if (currentTabId) reloadTab(currentTabId); });
 
     elements.btnUpdate.addEventListener('click', async () => {
@@ -212,6 +278,21 @@ document.addEventListener('DOMContentLoaded', () => {
         tab.addEventListener('click', (e) => {
             elements.modalTabs.forEach(t => t.classList.remove('active')); elements.tabContents.forEach(c => c.classList.remove('active'));
             e.target.classList.add('active'); document.getElementById(`tab-${e.target.dataset.tab}`).classList.add('active');
+        });
+    });
+
+    // Handle About tab link clicks - open in default browser
+    document.querySelectorAll('.about-link-btn').forEach(link => {
+        link.addEventListener('click', async (e) => {
+            e.preventDefault();
+            const url = e.target.dataset.url;
+            if (url) {
+                try {
+                    await window.electronAPI.openInBrowser(url);
+                } catch (error) {
+                    console.error('[About] Failed to open link:', error);
+                }
+            }
         });
     });
 
