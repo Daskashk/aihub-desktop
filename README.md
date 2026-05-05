@@ -367,6 +367,8 @@ The original AI Hub Android app was inspired by:
 - Join the conversation on Matrix:
   **[#aihub-silentcoder:matrix.org](https://matrix.to/#/#aihub-silentcoder:matrix.org)**
   **[#topic-guild:matrix.org](https://matrix.to/#/#topic-guild:matrix.org)**
+- Join my community on Telegram:
+  **[@topicguild](https://t.me/topicsguild)
   
 ---
 
