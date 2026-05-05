@@ -1,7 +1,9 @@
 // main.js - Main Process for AI Hub Desktop
-const { app, BrowserWindow, ipcMain, session, shell, net } = require('electron');
+const { app, BrowserWindow, ipcMain, session, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const https = require('https');
+const http = require('http');
 
 // --- PATHS ---
 const configPath = path.join(app.getPath('userData'), 'config.json');
@@ -59,28 +61,31 @@ function saveConfig() {
   }
 }
 
-// --- REMOTE DATA FETCHING (using Electron net module for better proxy/system cert support) ---
+// --- REMOTE DATA FETCHING ---
 function fetchUrl(url) {
   return new Promise((resolve, reject) => {
-    const request = net.request(url);
-    let data = '';
-    request.on('response', (response) => {
-      const statusCode = response.statusCode;
-      if (statusCode >= 300 && statusCode < 400 && response.headers.location) {
-        return fetchUrl(response.headers.location).then(resolve).catch(reject);
+    const protocol = url.startsWith('https') ? https : http;
+
+    // Manual timeout wrapper (compatible with all Electron builds)
+    const timeout = setTimeout(() => {
+      req.destroy(new Error('Request timeout'));
+    }, 15000);
+
+    const req = protocol.get(url, (response) => {
+      clearTimeout(timeout);
+      if (response.statusCode === 301 || response.statusCode === 302) {
+        if (response.headers.location) return fetchUrl(response.headers.location).then(resolve).catch(reject);
       }
-      if (statusCode !== 200) {
-        return reject(new Error(`HTTP Status ${statusCode}`));
+      if (response.statusCode !== 200) {
+        return reject(new Error(`HTTP Status ${response.statusCode}`));
       }
-      response.on('data', (chunk) => { data += chunk.toString(); });
+      let data = '';
+      response.on('data', chunk => data += chunk);
       response.on('end', () => resolve(data));
+    }).on('error', (err) => {
+      clearTimeout(timeout);
+      reject(err);
     });
-    request.on('error', reject);
-    request.setTimeout(15000, () => {
-      request.abort();
-      reject(new Error('Request timeout'));
-    });
-    request.end();
   });
 }
 
@@ -443,9 +448,9 @@ ipcMain.handle('open-login-window', async (event, url, serviceId) => {
 ipcMain.handle('get-app-version', () => {
   try {
     const pkg = require('./package.json');
-    return pkg.version || '0.4.0-beta';
+    return pkg.version || '0.5.1-beta';
   } catch (e) {
-    return '0.4.0-beta';
+    return '0.5.1-beta';
   }
 });
 

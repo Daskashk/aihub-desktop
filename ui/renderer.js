@@ -19,6 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
                           tabContents: document.querySelectorAll('.tab-content'),
                           btnZoomIn: document.getElementById('btn-zoom-in'),
                           btnZoomOut: document.getElementById('btn-zoom-out'),
+                          btnZoomReset: document.getElementById('btn-zoom-reset'),
                           btnOpenBrowser: document.getElementById('btn-open-browser'),
                           blockingIndicator: document.getElementById('blocking-indicator'),
                           blockingText: document.getElementById('blocking-text'),
@@ -35,7 +36,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let allServices = [];
     let activeTabs = [];
     let currentTabId = null;
-    let appVersion = '0.4.0-beta';
+    let appVersion = '0.5.1-beta';
     let currentFilter = 'all';
     let searchQuery = '';
 
@@ -444,7 +445,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const tab = activeTabs[index];
         try {
             tab.webview.stop();
-            tab.webview.src = 'about:blank';
         } catch (e) {}
         tab.webview.remove();
 
@@ -482,6 +482,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 const tab = activeTabs.find(t => t.id === currentTabId);
                 if (tab) applyZoom(currentTabId, Math.max(tab.zoomLevel - 0.5, -5));
             };
+
+                const zoomReset = () => {
+                    if (!currentTabId) return;
+                    applyZoom(currentTabId, 0);
+                };
 
                 // Open current service in default browser
                 const openInBrowser = async () => {
@@ -526,120 +531,122 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 elements.btnZoomIn.addEventListener('click', zoomIn);
                 elements.btnZoomOut.addEventListener('click', zoomOut);
+                if (elements.btnZoomReset) elements.btnZoomReset.addEventListener('click', zoomReset);
                 elements.btnOpenBrowser.addEventListener('click', openInBrowser);
-                elements.btnReloadPage.addEventListener('click', () => { if (currentTabId) reloadTab(currentTabId); });
+    elements.btnReloadPage.addEventListener('click', () => { if (currentTabId) reloadTab(currentTabId); });
 
-                elements.btnUpdate.addEventListener('click', async () => {
-                    elements.blockingIndicator.className = 'indicator';
-                    elements.blockingText.textContent = 'Updating...';
-                    try {
-                        const result = await window.electronAPI.updateRemoteData();
-                        if (result.success) {
-                            if (result.updated) {
-                                await loadServices();
-                                config.lastUpdate = new Date().toISOString();
-                                elements.lastUpdate.textContent = formatDate(config.lastUpdate);
-                                elements.blockingText.textContent = 'Updated!';
-                            } else {
-                                elements.blockingText.textContent = 'Up to date';
-                            }
-                        } else {
-                            elements.blockingText.textContent = 'Update Failed';
-                        }
-                        setTimeout(() => updateBlockingUI(config.blockingEnabled), 2500);
-                    } catch (error) {
-                        elements.blockingText.textContent = 'Update Error';
-                        setTimeout(() => updateBlockingUI(config.blockingEnabled), 2500);
-                    }
-                });
-
-                elements.btnClearData.addEventListener('click', () => {
-                    if (!currentTabId) return;
-                    elements.clearDataModal.classList.remove('hidden');
-                });
-
-                elements.btnCancelClear.addEventListener('click', () => elements.clearDataModal.classList.add('hidden'));
-
-                elements.btnConfirmClear.addEventListener('click', async () => {
-                    elements.clearDataModal.classList.add('hidden');
-                    if (currentTabId) {
-                        try {
-                            const result = await window.electronAPI.clearServiceData(currentTabId);
-                            if (result.success) {
-                                reloadTab(currentTabId);
-                            } else {
-                                alert('Failed to clear data: ' + (result.error || 'Unknown error'));
-                            }
-                        } catch (error) {
-                            alert('Error clearing data');
-                        }
-                    }
-                });
-
-                elements.modalTabs.forEach(tab => {
-                    tab.addEventListener('click', (e) => {
-                        elements.modalTabs.forEach(t => t.classList.remove('active'));
-                        elements.tabContents.forEach(c => c.classList.remove('active'));
-                        e.target.classList.add('active');
-                        document.getElementById(`tab-${e.target.dataset.tab}`).classList.add('active');
-                    });
-                });
-
-                // Handle About tab link clicks
-                document.querySelectorAll('.about-link-btn').forEach(link => {
-                    link.addEventListener('click', async (e) => {
-                        e.preventDefault();
-                        const url = e.target.dataset.url;
-                        if (url) {
-                            try {
-                                await window.electronAPI.openInBrowser(url);
-                            } catch (error) {
-                                console.error('[About] Failed to open link:', error);
-                            }
-                        }
-                    });
-                });
-
-                // NEW: Service search and category filter in settings
-                if (elements.serviceSearch) {
-                    elements.serviceSearch.addEventListener('input', (e) => {
-                        searchQuery = e.target.value.trim();
-                        renderSettingsServices();
-                    });
-                }
-
-                if (elements.categoryFilter) {
-                    elements.categoryFilter.addEventListener('change', (e) => {
-                        currentFilter = e.target.value;
-                        renderSettingsServices();
-                    });
-                }
-
-                // NEW: Listen for login window close events
-                window.electronAPI.onLoginWindowClosed((serviceId) => {
-                    // Reload the service tab if it's open
-                    const tab = activeTabs.find(t => t.id === serviceId);
-                    if (tab) {
-                        tab.webview.reload();
-                    }
-                });
-
-                // Keyboard shortcuts
-                document.addEventListener('keydown', (e) => {
-                    if (e.key === 'Escape') {
-                        elements.settingsPanel.classList.add('hidden');
-                        elements.clearDataModal.classList.add('hidden');
-                    }
-                    if (e.ctrlKey && e.key === '=') { e.preventDefault(); zoomIn(); }
-                    if (e.ctrlKey && e.key === '-') { e.preventDefault(); zoomOut(); }
-                    if (e.ctrlKey && e.key === 'r') { e.preventDefault(); if (currentTabId) reloadTab(currentTabId); }
-                });
-
-                // --- INITIALIZATION ---
-                const init = async () => {
-                    await loadConfig();
+    elements.btnUpdate.addEventListener('click', async () => {
+        elements.blockingIndicator.className = 'indicator';
+        elements.blockingText.textContent = 'Updating...';
+        try {
+            const result = await window.electronAPI.updateRemoteData();
+            if (result.success) {
+                if (result.updated) {
                     await loadServices();
-                    await loadAppVersion();
-                };
-                init();
+                    config.lastUpdate = new Date().toISOString();
+                    elements.lastUpdate.textContent = formatDate(config.lastUpdate);
+                    elements.blockingText.textContent = 'Updated!';
+                } else {
+                    elements.blockingText.textContent = 'Up to date';
+                }
+            } else {
+                elements.blockingText.textContent = 'Update Failed';
+            }
+            setTimeout(() => updateBlockingUI(config.blockingEnabled), 2500);
+        } catch (error) {
+            elements.blockingText.textContent = 'Update Error';
+            setTimeout(() => updateBlockingUI(config.blockingEnabled), 2500);
+        }
+    });
+
+    elements.btnClearData.addEventListener('click', () => {
+        if (!currentTabId) return;
+        elements.clearDataModal.classList.remove('hidden');
+    });
+
+    elements.btnCancelClear.addEventListener('click', () => elements.clearDataModal.classList.add('hidden'));
+
+    elements.btnConfirmClear.addEventListener('click', async () => {
+        elements.clearDataModal.classList.add('hidden');
+        if (currentTabId) {
+            try {
+                const result = await window.electronAPI.clearServiceData(currentTabId);
+                if (result.success) {
+                    reloadTab(currentTabId);
+                } else {
+                    alert('Failed to clear data: ' + (result.error || 'Unknown error'));
+                }
+            } catch (error) {
+                alert('Error clearing data');
+            }
+        }
+    });
+
+    elements.modalTabs.forEach(tab => {
+        tab.addEventListener('click', (e) => {
+            elements.modalTabs.forEach(t => t.classList.remove('active'));
+            elements.tabContents.forEach(c => c.classList.remove('active'));
+            e.target.classList.add('active');
+            document.getElementById(`tab-${e.target.dataset.tab}`).classList.add('active');
+        });
+    });
+
+    // Handle About tab link clicks
+    document.querySelectorAll('.about-link-btn').forEach(link => {
+        link.addEventListener('click', async (e) => {
+            e.preventDefault();
+            const url = e.target.dataset.url;
+            if (url) {
+                try {
+                    await window.electronAPI.openInBrowser(url);
+                } catch (error) {
+                    console.error('[About] Failed to open link:', error);
+                }
+            }
+        });
+    });
+
+    // NEW: Service search and category filter in settings
+    if (elements.serviceSearch) {
+        elements.serviceSearch.addEventListener('input', (e) => {
+            searchQuery = e.target.value.trim();
+            renderSettingsServices();
+        });
+    }
+
+    if (elements.categoryFilter) {
+        elements.categoryFilter.addEventListener('change', (e) => {
+            currentFilter = e.target.value;
+            renderSettingsServices();
+        });
+    }
+
+    // NEW: Listen for login window close events
+    window.electronAPI.onLoginWindowClosed((serviceId) => {
+        // Reload the service tab if it's open
+        const tab = activeTabs.find(t => t.id === serviceId);
+        if (tab) {
+            tab.webview.reload();
+        }
+    });
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            elements.settingsPanel.classList.add('hidden');
+            elements.clearDataModal.classList.add('hidden');
+        }
+        if (e.ctrlKey && e.key === '=') { e.preventDefault(); zoomIn(); }
+        if (e.ctrlKey && e.key === '-') { e.preventDefault(); zoomOut(); }
+        if (e.ctrlKey && e.key === '0') { e.preventDefault(); zoomReset(); }
+        if (e.ctrlKey && e.key === 'r') { e.preventDefault(); if (currentTabId) reloadTab(currentTabId); }
+    });
+
+    // --- INITIALIZATION ---
+    const init = async () => {
+        await loadConfig();
+        await loadServices();
+        await loadAppVersion();
+    };
+    init();
 });
