@@ -382,6 +382,6 @@ This means you are free to use, modify, and distribute this software, provided t
 
 **[⬆ Back to Top](#ai-hub-desktop)**
 
-Made with with AI assistant· Based on [AI Hub](https://github.com/SilentCoderHere/aihub) by [SilentCoder](https://github.com/SilentCoderHere)
+Made with AI assistant· Based on [AI Hub](https://github.com/SilentCoderHere/aihub) by [SilentCoder](https://github.com/SilentCoderHere)
 
 </div>
