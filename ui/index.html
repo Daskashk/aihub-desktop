@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:;">
     <title>AI Hub Desktop</title>
     <link rel="stylesheet" href="styles.css">
 </head>
@@ -33,7 +33,7 @@
                 <button id="btn-open-browser" class="btn btn-icon" title="Open in Browser">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
                 </button>
-                <button id="btn-reload-page" class="btn btn-icon" title="Reload Current Page">↻</button>
+                <button id="btn-reload-page" class="btn btn-icon" title="Reload Current Page">&#8635;</button>
                 <button id="btn-clear-data" class="btn btn-icon" title="Clear Site Data">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
                 </button>
@@ -58,15 +58,20 @@
             </div>
         </main>
 
+        <!-- Settings Modal -->
         <div id="settings-panel" class="settings-modal hidden">
             <div class="modal-content">
-                <div class="modal-header"><h2>Settings</h2><button id="btn-close-settings" class="btn btn-icon">✕</button></div>
+                <div class="modal-header">
+                    <h2>Settings</h2>
+                    <button id="btn-close-settings" class="btn btn-icon">&#10005;</button>
+                </div>
                 <div class="modal-tabs">
                     <button class="modal-tab active" data-tab="general">General</button>
                     <button class="modal-tab" data-tab="services">Manage Services</button>
                     <button class="modal-tab" data-tab="about">About</button>
                 </div>
                 <div class="modal-body">
+                    <!-- General Tab -->
                     <div id="tab-general" class="tab-content active">
                         <div class="setting-group">
                             <div class="setting-row">
@@ -116,16 +121,26 @@
                             <button id="btn-save-settings" class="btn btn-primary btn-modern">Save Changes</button>
                         </div>
                     </div>
+
+                    <!-- Manage Services Tab -->
                     <div id="tab-services" class="tab-content">
+                        <div class="services-filter-bar">
+                            <input type="text" id="service-search" class="service-search-input" placeholder="Search services...">
+                            <select id="category-filter" class="category-filter-select">
+                                <option value="all">All Categories</option>
+                            </select>
+                        </div>
                         <div id="all-services-list" class="services-manager"></div>
                     </div>
+
+                    <!-- About Tab -->
                     <div id="tab-about" class="tab-content">
                         <div class="about-content">
                             <div class="about-logo">
                                 <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--accent-color)" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M8 12h8M12 8v8"/></svg>
                             </div>
                             <h2 class="about-title">AI Hub Desktop</h2>
-                            <p class="about-version">v0.3.1-beta</p>
+                            <p class="about-version" id="about-version">v0.4.0-beta</p>
                             <p class="about-description">All-in-one AI assistants desktop application</p>
 
                             <div class="about-divider"></div>
@@ -166,6 +181,13 @@
                                     </div>
                                     <a href="#" class="about-link-btn" data-url="https://matrix.to/#/#topic-guild:matrix.org">Join</a>
                                 </div>
+                                <div class="about-link-item">
+                                    <div class="about-link-text">
+                                        <div class="about-link-title">Topic Guild Telegram Group</div>
+                                        <div class="about-link-desc">Join the Topic Guild community on Telegram</div>
+                                    </div>
+                                    <a href="#" class="about-link-btn" data-url="https://t.me/topicsguild">Join</a>
+                                </div>
                             </div>
 
                             <div class="about-divider"></div>
@@ -179,9 +201,10 @@
             </div>
         </div>
 
+        <!-- Clear Data Confirmation Modal -->
         <div id="clear-data-modal" class="settings-modal hidden">
             <div class="modal-content warning-modal">
-                <div class="modal-header"><h2>⚠️ Clear Site Data</h2></div>
+                <div class="modal-header"><h2>Clear Site Data</h2></div>
                 <div class="modal-body">
                     <p style="font-size: 13px; line-height: 1.5; margin-bottom: 16px;">
                         This will permanently delete cookies, cache, and local storage for the current service. You will be logged out and the page will reload.
