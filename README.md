@@ -10,10 +10,6 @@
 [![Electron](https://img.shields.io/badge/Electron-41-47848f.svg?logo=electron&logoColor=white)](https://www.electronjs.org/)
 [![PRs Welcome](https://img.shields.io/badge/PRs-Welcome-brightgreen.svg)](https://github.com/Daskashk/aihub-desktop/pulls)
 
-[![Telegram](https://img.shields.io/badge/Telegram.svg)](https://t.me/topicsguild)
-[![Matrix TOPIC Guild](https://img.shields.io/badge/Matrix.svg)](https://matrix.to/#/#topic-guild:matrix.org)
-[![Matrix AI Hub](https://img.shields.io/badge/Matrix.svg)](https://matrix.to/#/#aihub-silentcoder:matrix.org)
-
 A lightweight, privacy-focused desktop application that brings **65+ AI assistants** together in a single tabbed interface. Built with Electron, powered by sandboxed WebViews, and fortified with network-level tracker blocking — no more juggling browser tabs or surrendering your data to analytics scripts.
 
 **Desktop port of the acclaimed [AI Hub for Android](https://github.com/SilentCoderHere/aihub)** by [SilentCoder](https://github.com/SilentCoderHere).
