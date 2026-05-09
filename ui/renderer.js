@@ -212,14 +212,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (css) {
             try {
-                const escapedCss = css.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$/g, '\\$');
+                // Use JSON.stringify to safely pass the CSS string - no template literal interpolation
+                const cssJson = JSON.stringify(css);
                 webview.executeJavaScript(`
                     (function() {
                         const style = document.createElement('style');
                         style.id = 'aihub-custom-css';
                         const existing = document.getElementById('aihub-custom-css');
                         if (existing) existing.remove();
-                        style.textContent = \`${escapedCss}\`;
+                        style.textContent = ${cssJson};
                         document.head.appendChild(style);
                     })();
                 `).catch(() => {});
@@ -239,9 +240,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const percent = getFontSizePercent(config.fontSize);
         if (percent !== 100) {
             try {
-                webview.executeJavaScript(`
-                    document.documentElement.style.fontSize = '${percent}%';
-                `).catch(() => {});
+                const safePercent = parseInt(percent, 10);
+                webview.executeJavaScript(
+                    `document.documentElement.style.fontSize = '${safePercent}%';`
+                ).catch(() => {});
             } catch (e) {}
         }
     };
@@ -1066,6 +1068,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const css = elements.customCssEditor ? elements.customCssEditor.value : '';
             try {
                 const result = await window.electronAPI.saveCustomInjection(js, css);
+                if (result.success === false) {
+                    alert('Failed to save injection: ' + (result.error || 'Unknown error'));
+                    return;
+                }
                 config.customJs = result.customJs;
                 config.customCss = result.customCss;
                 injectionDirty = { js: false, css: false };

@@ -23,20 +23,20 @@ const defaultConfig = {
   serviceOrder: [],
   lastActiveService: null,
   defaultService: 'chatgpt',
-    loadLastOpenedAI: true,
-    customJs: '',
-    customCss: '',
-    thirdPartyCookies: false,
-    updateFrequencyDays: 3,
-    fontSize: 'medium',
-    proxyEnabled: false,
-    proxyType: 'http',
-    proxyHost: '',
-    proxyPort: '',
-    remoteUrls: {
-      services: "https://raw.githubusercontent.com/SilentCoderHere/aihub-config-data/main/ai_services_list.json",
-      rules: "https://raw.githubusercontent.com/SilentCoderHere/aihub-config-data/main/domain_filtering_rules.json"
-    }
+  loadLastOpenedAI: true,
+  customJs: '',
+  customCss: '',
+  thirdPartyCookies: false,
+  updateFrequencyDays: 3,
+  fontSize: 'medium',
+  proxyEnabled: false,
+  proxyType: 'http',
+  proxyHost: '',
+  proxyPort: '',
+  remoteUrls: {
+    services: "https://raw.githubusercontent.com/SilentCoderHere/aihub-config-data/main/ai_services_list.json",
+    rules: "https://raw.githubusercontent.com/SilentCoderHere/aihub-config-data/main/domain_filtering_rules.json"
+  }
 };
 
 let config = { ...defaultConfig };
@@ -133,7 +133,7 @@ function calculateUpdateDiff(oldServices, newServices, oldRules, newRules) {
     if (data && data.ai_services) {
       data.ai_services.forEach(s => {
         const name = s[0];
-        const id = name.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/g, '');
+        const id = name.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9-]/g, '');
         map.set(id, { name, data: s });
       });
     }
@@ -204,17 +204,17 @@ function calculateUpdateDiff(oldServices, newServices, oldRules, newRules) {
   }
 
   diff.hasChanges =
-  diff.servicesAdded.length > 0 ||
-  diff.servicesRemoved.length > 0 ||
-  diff.servicesChanged.length > 0 ||
-  diff.domainsAdded.length > 0 ||
-  diff.domainsRemoved.length > 0 ||
-  diff.alwaysBlockedAdded.length > 0 ||
-  diff.alwaysBlockedRemoved.length > 0 ||
-  diff.commonAuthAdded.length > 0 ||
-  diff.commonAuthRemoved.length > 0 ||
-  diff.trackingParamsAdded.length > 0 ||
-  diff.trackingParamsRemoved.length > 0;
+    diff.servicesAdded.length > 0 ||
+    diff.servicesRemoved.length > 0 ||
+    diff.servicesChanged.length > 0 ||
+    diff.domainsAdded.length > 0 ||
+    diff.domainsRemoved.length > 0 ||
+    diff.alwaysBlockedAdded.length > 0 ||
+    diff.alwaysBlockedRemoved.length > 0 ||
+    diff.commonAuthAdded.length > 0 ||
+    diff.commonAuthRemoved.length > 0 ||
+    diff.trackingParamsAdded.length > 0 ||
+    diff.trackingParamsRemoved.length > 0;
 
   return diff;
 }
@@ -259,7 +259,7 @@ async function updateRemoteData() {
       if (newServicesData && newServicesData.ai_services) {
         newServicesData.ai_services.forEach(s => {
           const name = s[0];
-          const id = name.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/g, '');
+          const id = name.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9-]/g, '');
           if (!config.serviceOrder.includes(id)) {
             config.serviceOrder.push(id);
           }
@@ -357,9 +357,13 @@ function setupSessionBlocking(serviceId) {
   const ses = session.fromPartition(partitionName);
   initializedSessions.add(partitionName);
 
-  // Apply third-party cookies setting
-  if (!config.thirdPartyCookies) {
-    ses.cookies.flushStorageData().catch(() => {});
+  // Flush cookie storage data to disk (safe check for different Electron builds)
+  try {
+    if (ses.cookies && typeof ses.cookies.flushStorageData === 'function') {
+      ses.cookies.flushStorageData().catch(() => {});
+    }
+  } catch (e) {
+    // Some Electron builds don't support this method
   }
 
   // Apply proxy if enabled
@@ -376,9 +380,9 @@ function setupSessionBlocking(serviceId) {
         details.url.startsWith('file://') ||
         details.url.startsWith('chrome-extension://')) {
         return callback({});
-        }
+      }
 
-        const rules = loadRules();
+      const rules = loadRules();
       let serviceDomains = [];
       if (rules && rules.service_domains && rules.service_domains[serviceId]) {
         serviceDomains = rules.service_domains[serviceId];
@@ -498,7 +502,7 @@ function createMainWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      sandbox: true,
+      sandbox: false,
       webviewTag: true,
       preload: path.join(__dirname, 'preload.js')
     }
@@ -528,7 +532,11 @@ function createMainWindow() {
 
 // --- IPC HANDLERS ---
 
-ipcMain.handle('get-config', () => config);
+ipcMain.handle('get-config', () => {
+  // Return a safe copy without exposing sensitive internal fields
+  const safeConfig = { ...config };
+  return safeConfig;
+});
 ipcMain.handle('get-services', () => loadServices());
 ipcMain.handle('get-rules', () => loadRules());
 ipcMain.handle('update-remote-data', async () => await updateRemoteData());
@@ -537,7 +545,8 @@ ipcMain.handle('save-config', (event, newConfig) => {
   const allowedKeys = [
     'blockingEnabled', 'maxActiveServices', 'darkMode',
     'defaultService', 'loadLastOpenedAI', 'thirdPartyCookies',
-    'updateFrequencyDays', 'fontSize'
+    'updateFrequencyDays', 'fontSize', 'proxyEnabled',
+    'proxyType', 'proxyHost', 'proxyPort', 'customJs', 'customCss'
   ];
   if (newConfig && newConfig.enabledServices) {
     config.enabledServices = [...new Set(newConfig.enabledServices)];
@@ -597,8 +606,24 @@ ipcMain.handle('set-service-order', (event, order) => {
 
 // New: Save custom JS/CSS injection
 ipcMain.handle('save-custom-injection', (event, js, css) => {
-  config.customJs = typeof js === 'string' ? js : '';
-  config.customCss = typeof css === 'string' ? css : '';
+  // Validate and sanitize custom injection code
+  const MAX_INJECTION_SIZE = 100000; // 100KB limit
+  if (typeof js === 'string') {
+    if (js.length > MAX_INJECTION_SIZE) js = js.substring(0, MAX_INJECTION_SIZE);
+    // Block obvious dangerous patterns in JS
+    if (/{\s*require\s*\(/.test(js) || /process\./.test(js) || /__dirname/.test(js) || /__filename/.test(js)) {
+      return { success: false, error: 'Custom JS contains forbidden patterns (require, process, __dirname, __filename)' };
+    }
+    config.customJs = js;
+  } else {
+    config.customJs = '';
+  }
+  if (typeof css === 'string') {
+    if (css.length > MAX_INJECTION_SIZE) css = css.substring(0, MAX_INJECTION_SIZE);
+    config.customCss = css;
+  } else {
+    config.customCss = '';
+  }
   saveConfig();
   return { success: true, customJs: config.customJs, customCss: config.customCss };
 });
@@ -658,7 +683,7 @@ ipcMain.handle('clear-all-data', async () => {
     const allServices = loadServices();
     const serviceIds = allServices?.ai_services?.map(s => {
       const name = s[0];
-      return name.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/g, '');
+      return name.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9-]/g, '');
     }) || [];
 
     for (const serviceId of serviceIds) {
@@ -685,7 +710,7 @@ ipcMain.handle('clear-cache', async () => {
     const allServices = loadServices();
     const serviceIds = allServices?.ai_services?.map(s => {
       const name = s[0];
-      return name.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/g, '');
+      return name.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9-]/g, '');
     }) || [];
 
     for (const serviceId of serviceIds) {
@@ -745,7 +770,7 @@ ipcMain.handle('open-login-window', async (event, url, serviceId) => {
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
-        sandbox: true,
+        sandbox: false,
         partition: `persist:${serviceId}`
       }
     });
