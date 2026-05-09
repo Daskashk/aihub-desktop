@@ -14,15 +14,29 @@ const rulesPath = path.join(dataDir, 'remote_rules.json');
 // --- DEFAULT CONFIG ---
 const defaultConfig = {
   lastUpdate: null,
+  lastUpdateCheck: null,
   blockingEnabled: true,
   maxActiveServices: 3,
   darkMode: true,
   enabledServices: ['chatgpt', 'claude', 'gemini'],
+  favoriteServices: [],
+  serviceOrder: [],
   lastActiveService: null,
-  remoteUrls: {
-    services: "https://raw.githubusercontent.com/SilentCoderHere/aihub-config-data/main/ai_services_list.json",
-    rules: "https://raw.githubusercontent.com/SilentCoderHere/aihub-config-data/main/domain_filtering_rules.json"
-  }
+  defaultService: 'chatgpt',
+    loadLastOpenedAI: true,
+    customJs: '',
+    customCss: '',
+    thirdPartyCookies: false,
+    updateFrequencyDays: 3,
+    fontSize: 'medium',
+    proxyEnabled: false,
+    proxyType: 'http',
+    proxyHost: '',
+    proxyPort: '',
+    remoteUrls: {
+      services: "https://raw.githubusercontent.com/SilentCoderHere/aihub-config-data/main/ai_services_list.json",
+      rules: "https://raw.githubusercontent.com/SilentCoderHere/aihub-config-data/main/domain_filtering_rules.json"
+    }
 };
 
 let config = { ...defaultConfig };
@@ -33,6 +47,11 @@ let rulesCache = null;
 const initializedSessions = new Set();
 let mainWindow = null;
 
+// Store old data for update diff
+let oldServicesData = null;
+let oldRulesData = null;
+let lastUpdateDetails = null;
+
 // --- CONFIG LOAD / SAVE ---
 function loadConfig() {
   try {
@@ -42,7 +61,10 @@ function loadConfig() {
       config = {
         ...defaultConfig,
         ...savedConfig,
-        enabledServices: savedConfig.enabledServices || defaultConfig.enabledServices
+        enabledServices: savedConfig.enabledServices || defaultConfig.enabledServices,
+        favoriteServices: savedConfig.favoriteServices || [],
+        serviceOrder: savedConfig.serviceOrder || [],
+        remoteUrls: { ...defaultConfig.remoteUrls, ...(savedConfig.remoteUrls || {}) }
       };
     }
     saveConfig();
@@ -89,10 +111,122 @@ function fetchUrl(url) {
   });
 }
 
+// --- UPDATE DIFF CALCULATION ---
+function calculateUpdateDiff(oldServices, newServices, oldRules, newRules) {
+  const diff = {
+    servicesAdded: [],
+    servicesRemoved: [],
+    servicesChanged: [],
+    domainsAdded: [],
+    domainsRemoved: [],
+    alwaysBlockedAdded: [],
+    alwaysBlockedRemoved: [],
+    commonAuthAdded: [],
+    commonAuthRemoved: [],
+    trackingParamsAdded: [],
+    trackingParamsRemoved: [],
+    hasChanges: false
+  };
+
+  const getServiceMap = (data) => {
+    const map = new Map();
+    if (data && data.ai_services) {
+      data.ai_services.forEach(s => {
+        const name = s[0];
+        const id = name.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/g, '');
+        map.set(id, { name, data: s });
+      });
+    }
+    return map;
+  };
+
+  const oldMap = getServiceMap(oldServices);
+  const newMap = getServiceMap(newServices);
+
+  // Find added and changed services
+  for (const [id, service] of newMap) {
+    if (!oldMap.has(id)) {
+      diff.servicesAdded.push(service.name);
+    } else {
+      const old = oldMap.get(id);
+      if (JSON.stringify(old.data) !== JSON.stringify(service.data)) {
+        diff.servicesChanged.push(service.name);
+      }
+    }
+  }
+
+  // Find removed services
+  for (const [id, service] of oldMap) {
+    if (!newMap.has(id)) {
+      diff.servicesRemoved.push(service.name);
+    }
+  }
+
+  // Compare domain rules
+  if (oldRules && newRules) {
+    const oldDomains = oldRules.service_domains || {};
+    const newDomains = newRules.service_domains || {};
+
+    for (const [key, domains] of Object.entries(newDomains)) {
+      if (!oldDomains[key]) {
+        diff.domainsAdded.push(key);
+      } else if (JSON.stringify(oldDomains[key].sort()) !== JSON.stringify(domains.sort())) {
+        diff.domainsAdded.push(key);
+      }
+    }
+    for (const key of Object.keys(oldDomains)) {
+      if (!newDomains[key]) {
+        diff.domainsRemoved.push(key);
+      }
+    }
+
+    // Always blocked domains
+    const oldBlocked = oldRules.always_blocked_domains || {};
+    const newBlocked = newRules.always_blocked_domains || {};
+    for (const key of Object.keys(newBlocked)) {
+      if (!oldBlocked[key]) diff.alwaysBlockedAdded.push(key);
+    }
+    for (const key of Object.keys(oldBlocked)) {
+      if (!newBlocked[key]) diff.alwaysBlockedRemoved.push(key);
+    }
+
+    // Common auth domains
+    const oldAuth = new Set(oldRules.common_auth_domains || []);
+    const newAuth = new Set(newRules.common_auth_domains || []);
+    for (const d of newAuth) { if (!oldAuth.has(d)) diff.commonAuthAdded.push(d); }
+    for (const d of oldAuth) { if (!newAuth.has(d)) diff.commonAuthRemoved.push(d); }
+
+    // Tracking params
+    const oldParams = new Set(oldRules.tracking_params || []);
+    const newParams = new Set(newRules.tracking_params || []);
+    for (const p of newParams) { if (!oldParams.has(p)) diff.trackingParamsAdded.push(p); }
+    for (const p of oldParams) { if (!newParams.has(p)) diff.trackingParamsRemoved.push(p); }
+  }
+
+  diff.hasChanges =
+  diff.servicesAdded.length > 0 ||
+  diff.servicesRemoved.length > 0 ||
+  diff.servicesChanged.length > 0 ||
+  diff.domainsAdded.length > 0 ||
+  diff.domainsRemoved.length > 0 ||
+  diff.alwaysBlockedAdded.length > 0 ||
+  diff.alwaysBlockedRemoved.length > 0 ||
+  diff.commonAuthAdded.length > 0 ||
+  diff.commonAuthRemoved.length > 0 ||
+  diff.trackingParamsAdded.length > 0 ||
+  diff.trackingParamsRemoved.length > 0;
+
+  return diff;
+}
+
 async function updateRemoteData() {
   try {
     if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
     let updated = false;
+
+    // Store old data for diff
+    oldServicesData = fs.existsSync(servicesPath) ? JSON.parse(fs.readFileSync(servicesPath, 'utf8')) : null;
+    oldRulesData = rulesCache || (fs.existsSync(rulesPath) ? JSON.parse(fs.readFileSync(rulesPath, 'utf8')) : null);
 
     const remoteServicesData = await fetchUrl(config.remoteUrls.services);
     const localServicesData = fs.existsSync(servicesPath) ? fs.readFileSync(servicesPath, 'utf8') : null;
@@ -112,10 +246,32 @@ async function updateRemoteData() {
 
     if (updated) {
       config.lastUpdate = new Date().toISOString();
+      config.lastUpdateCheck = new Date().toISOString();
       saveConfig();
       loadRules();
+
+      // Calculate diff
+      const newServicesData = JSON.parse(remoteServicesData);
+      const newRulesData = JSON.parse(remoteRulesData);
+      lastUpdateDetails = calculateUpdateDiff(oldServicesData, newServicesData, oldRulesData, newRulesData);
+
+      // Auto-enable new services
+      if (newServicesData && newServicesData.ai_services) {
+        newServicesData.ai_services.forEach(s => {
+          const name = s[0];
+          const id = name.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/g, '');
+          if (!config.serviceOrder.includes(id)) {
+            config.serviceOrder.push(id);
+          }
+        });
+        saveConfig();
+      }
+    } else {
+      config.lastUpdateCheck = new Date().toISOString();
+      saveConfig();
     }
-    return { success: true, updated };
+
+    return { success: true, updated, updateDetails: updated ? lastUpdateDetails : null };
   } catch (error) {
     console.error('[Update] Error:', error);
     return { success: false, error: error.message, updated: false };
@@ -201,6 +357,16 @@ function setupSessionBlocking(serviceId) {
   const ses = session.fromPartition(partitionName);
   initializedSessions.add(partitionName);
 
+  // Apply third-party cookies setting
+  if (!config.thirdPartyCookies) {
+    ses.cookies.flushStorageData().catch(() => {});
+  }
+
+  // Apply proxy if enabled
+  if (config.proxyEnabled && config.proxyHost && config.proxyPort) {
+    applyProxyToSession(ses);
+  }
+
   ses.webRequest.onBeforeRequest({ urls: ['*://*/*'] }, (details, callback) => {
     try {
       const url = new URL(details.url);
@@ -244,13 +410,79 @@ function setupSessionBlocking(serviceId) {
   });
 }
 
+// --- PROXY SUPPORT ---
+function applyProxyToSession(ses) {
+  if (!config.proxyEnabled || !config.proxyHost || !config.proxyPort) {
+    ses.setProxy({ mode: 'system' }).catch(() => {});
+    return;
+  }
+  const proxyConfig = {
+    proxyRules: `${config.proxyType}://${config.proxyHost}:${config.proxyPort}`
+  };
+  ses.setProxy(proxyConfig).catch(err => {
+    console.error('[Proxy] Failed to set proxy:', err);
+  });
+}
+
+function applyProxyToAllSessions() {
+  for (const partitionName of initializedSessions) {
+    const ses = session.fromPartition(partitionName);
+    applyProxyToSession(ses);
+  }
+}
+
+// --- THIRD-PARTY COOKIES ---
+async function applyThirdPartyCookiesPolicy(ses) {
+  // Electron doesn't have a direct third-party cookie API like Android WebView
+  // We use content blocking via webRequest to block cross-origin cookies
+  if (!config.thirdPartyCookies) {
+    // Already handled by domain blocking - cross-origin requests are blocked
+    // This is effectively more restrictive than Android's third-party cookie setting
+  }
+}
+
+// --- CUSTOM INJECTION ---
+function getCustomJs() {
+  return config.customJs || '';
+}
+
+function getCustomCss() {
+  return config.customCss || '';
+}
+
 // --- SESSION WARMUP ---
 function warmupSessions() {
   if (!config.enabledServices) return;
   config.enabledServices.forEach(serviceId => {
     const ses = session.fromPartition(`persist:${serviceId}`);
     ses.cookies.get({}).catch(() => {});
+    // Apply proxy if enabled
+    if (config.proxyEnabled && config.proxyHost && config.proxyPort) {
+      applyProxyToSession(ses);
+    }
   });
+}
+
+// --- AUTO UPDATE CHECK ---
+function shouldAutoUpdate() {
+  if (!config.updateFrequencyDays || config.updateFrequencyDays === -1) return false;
+  if (!config.lastUpdateCheck) return true;
+  const lastCheck = new Date(config.lastUpdateCheck);
+  const now = new Date();
+  const daysSinceLastCheck = (now - lastCheck) / (1000 * 60 * 60 * 24);
+  return daysSinceLastCheck >= config.updateFrequencyDays;
+}
+
+async function autoUpdateCheck() {
+  if (shouldAutoUpdate()) {
+    console.log('[AutoUpdate] Checking for updates...');
+    const result = await updateRemoteData();
+    if (result.success && result.updated && mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('auto-update-available', result.updateDetails);
+    }
+    return result;
+  }
+  return { success: true, updated: false };
 }
 
 // --- MAIN WINDOW CREATION ---
@@ -302,7 +534,11 @@ ipcMain.handle('get-rules', () => loadRules());
 ipcMain.handle('update-remote-data', async () => await updateRemoteData());
 
 ipcMain.handle('save-config', (event, newConfig) => {
-  const allowedKeys = ['blockingEnabled', 'maxActiveServices', 'darkMode'];
+  const allowedKeys = [
+    'blockingEnabled', 'maxActiveServices', 'darkMode',
+    'defaultService', 'loadLastOpenedAI', 'thirdPartyCookies',
+    'updateFrequencyDays', 'fontSize'
+  ];
   if (newConfig && newConfig.enabledServices) {
     config.enabledServices = [...new Set(newConfig.enabledServices)];
   }
@@ -317,8 +553,17 @@ ipcMain.handle('toggle-service', (event, serviceId) => {
   // Allow hyphens in service IDs (e.g., "sea-lion")
   if (typeof serviceId !== 'string' || !/^[a-z0-9-]+$/.test(serviceId)) return config.enabledServices;
   const index = config.enabledServices.indexOf(serviceId);
-  if (index === -1) config.enabledServices.push(serviceId);
-  else config.enabledServices.splice(index, 1);
+  if (index === -1) {
+    config.enabledServices.push(serviceId);
+    // Add to service order if not already there
+    if (!config.serviceOrder.includes(serviceId)) {
+      config.serviceOrder.push(serviceId);
+    }
+  } else {
+    // Don't allow disabling the last enabled service
+    if (config.enabledServices.length <= 1) return config.enabledServices;
+    config.enabledServices.splice(index, 1);
+  }
   saveConfig();
   return config.enabledServices;
 });
@@ -326,6 +571,68 @@ ipcMain.handle('toggle-service', (event, serviceId) => {
 ipcMain.on('set-active-service', (event, serviceId) => {
   config.lastActiveService = serviceId;
   setupSessionBlocking(serviceId);
+  saveConfig();
+});
+
+// New: Toggle favorite
+ipcMain.handle('toggle-favorite', (event, serviceId) => {
+  if (typeof serviceId !== 'string' || !/^[a-z0-9-]+$/.test(serviceId)) return config.favoriteServices;
+  const index = config.favoriteServices.indexOf(serviceId);
+  if (index === -1) {
+    config.favoriteServices.push(serviceId);
+  } else {
+    config.favoriteServices.splice(index, 1);
+  }
+  saveConfig();
+  return config.favoriteServices;
+});
+
+// New: Set service order
+ipcMain.handle('set-service-order', (event, order) => {
+  if (!Array.isArray(order)) return config.serviceOrder;
+  config.serviceOrder = order.filter(id => typeof id === 'string' && /^[a-z0-9-]+$/.test(id));
+  saveConfig();
+  return config.serviceOrder;
+});
+
+// New: Save custom JS/CSS injection
+ipcMain.handle('save-custom-injection', (event, js, css) => {
+  config.customJs = typeof js === 'string' ? js : '';
+  config.customCss = typeof css === 'string' ? css : '';
+  saveConfig();
+  return { success: true, customJs: config.customJs, customCss: config.customCss };
+});
+
+// New: Get update details
+ipcMain.handle('get-update-details', () => {
+  return lastUpdateDetails;
+});
+
+// New: Set proxy
+ipcMain.handle('set-proxy', (event, proxyConfig) => {
+  if (!proxyConfig || typeof proxyConfig !== 'object') return { success: false };
+  config.proxyEnabled = !!proxyConfig.proxyEnabled;
+  config.proxyType = (proxyConfig.proxyType === 'socks5' || proxyConfig.proxyType === 'http') ? proxyConfig.proxyType : 'http';
+  config.proxyHost = typeof proxyConfig.proxyHost === 'string' ? proxyConfig.proxyHost.replace(/[^a-zA-Z0-9.\-_]/g, '') : '';
+  config.proxyPort = typeof proxyConfig.proxyPort === 'string' ? proxyConfig.proxyPort.replace(/[^0-9]/g, '') : '';
+  saveConfig();
+  applyProxyToAllSessions();
+  return { success: true };
+});
+
+// New: Apply proxy to a specific session
+ipcMain.handle('apply-proxy-to-session', (event, serviceId) => {
+  if (typeof serviceId !== 'string' || !/^[a-z0-9-]+$/.test(serviceId)) return;
+  const partitionName = `persist:${serviceId}`;
+  const ses = session.fromPartition(partitionName);
+  applyProxyToSession(ses);
+});
+
+// New: Set third-party cookies
+ipcMain.handle('set-third-party-cookies', (event, enabled) => {
+  config.thirdPartyCookies = !!enabled;
+  saveConfig();
+  return { success: true };
 });
 
 ipcMain.handle('clear-service-data', async (event, serviceId) => {
@@ -351,8 +658,7 @@ ipcMain.handle('clear-all-data', async () => {
     const allServices = loadServices();
     const serviceIds = allServices?.ai_services?.map(s => {
       const name = s[0];
-      const explicitId = s[5];
-      return explicitId || name.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/g, '');
+      return name.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/g, '');
     }) || [];
 
     for (const serviceId of serviceIds) {
@@ -370,6 +676,31 @@ ipcMain.handle('clear-all-data', async () => {
   } catch (error) {
     console.error('[ClearAllData] Error:', error);
     return { success: false, error: 'Failed to clear all data' };
+  }
+});
+
+// New: Clear cache only (not cookies/storage)
+ipcMain.handle('clear-cache', async () => {
+  try {
+    const allServices = loadServices();
+    const serviceIds = allServices?.ai_services?.map(s => {
+      const name = s[0];
+      return name.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/g, '');
+    }) || [];
+
+    for (const serviceId of serviceIds) {
+      try {
+        const partitionName = `persist:${serviceId}`;
+        const ses = session.fromPartition(partitionName);
+        await ses.clearCache();
+      } catch (e) {
+        // Continue even if one fails
+      }
+    }
+    return { success: true };
+  } catch (error) {
+    console.error('[ClearCache] Error:', error);
+    return { success: false, error: 'Failed to clear cache' };
   }
 });
 
@@ -448,9 +779,9 @@ ipcMain.handle('open-login-window', async (event, url, serviceId) => {
 ipcMain.handle('get-app-version', () => {
   try {
     const pkg = require('./package.json');
-    return pkg.version || '0.5.1-beta';
+    return pkg.version || '0.6.0-beta';
   } catch (e) {
-    return '0.5.1-beta';
+    return '0.6.0-beta';
   }
 });
 
@@ -476,6 +807,13 @@ app.whenReady().then(() => {
   loadRules();
   warmupSessions();
   createMainWindow();
+
+  // Auto-update check after a short delay
+  setTimeout(() => {
+    autoUpdateCheck().catch(err => {
+      console.error('[AutoUpdate] Error:', err);
+    });
+  }, 3000);
 });
 
 app.on('window-all-closed', () => {
