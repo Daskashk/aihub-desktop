@@ -3,7 +3,7 @@
   "version": "0.6.2-beta",
   "description": "All-in-one AI assistants desktop app",
   "main": "main.js",
-  "author": "Daskashk",
+  "author": "Daskashk <daskashk@example.com>",
   "license": "GPL-3.0",
 
   "scripts": {
