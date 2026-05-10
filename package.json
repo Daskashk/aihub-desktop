@@ -39,17 +39,15 @@
 
     "win": {
       "target": "nsis",
-      "icon": "ui/assets/icon.ico",
-      "differentialPackage": false
+      "icon": "ui/assets/icon.ico"
     },
 
     "mac": {
       "target": "dmg",
       "icon": "ui/assets/icon.icns",
-      "category": "public.app-category.productivity",
-      "differentialPackage": false
+      "category": "public.app-category.productivity"
     },
-    
+
     "publish": null
   },
 
