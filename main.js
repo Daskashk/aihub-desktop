@@ -1,4 +1,4 @@
-/ main.js - Main Process for AI Hub Desktop
+/// main.js - Main Process for AI Hub Desktop
 const { app, BrowserWindow, ipcMain, session, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
@@ -372,7 +372,7 @@ function setupSessionBlocking(serviceId) {
     if (typeof ses.cookies.flushStorageData === 'function') {
       ses.cookies.flushStorageData().catch(() => {});
     } else if (typeof ses.flushStorageData === 'function') {
-      ses.flushStorageData().catch(() => {});
+      ses.flushStorageData();
     }
   }
 
