@@ -968,7 +968,7 @@ class AIHubApp(Gtk.Application):
         l_ab = Gtk.Label(label='AI Hub for Linux', xalign=0)
         l_ab.set_markup('<b>AI Hub for Linux</b>')
         ab.pack_start(l_ab, False, False, 0)
-        ab.pack_start(Gtk.Label(label='Version 0.2.1-beta (Python - Linux Native)', xalign=0), False, False, 0)
+        ab.pack_start(Gtk.Label(label='Version 0.2.0-beta (Python - Linux Native)', xalign=0), False, False, 0)
         ab.pack_start(Gtk.Label(label='All-in-one AI assistants desktop application', xalign=0), False, False, 0)
 
         sep1 = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)

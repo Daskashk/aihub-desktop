@@ -1,4 +1,4 @@
-aihub-for-linux (0.2.1-beta-1) unstable; urgency=medium
+aihub-for-linux (0.2.0-beta-1) unstable; urgency=medium
 
   * Initial release: native Python/GTK/WebKitGTK application.
   * Complete rewrite from Electron to native Linux stack.

@@ -21,19 +21,40 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y python3-gi python3-gi-cairo gir1.2-webkit2-4.1 \
-                                  gir1.2-gtk-3.0 python3-pip patchelf fakeroot
+                                  gir1.2-gtk-3.0 python3-pip patchelf fakeroot rpm-build
+
+      - name: Install PyInstaller
+        run: pip install pyinstaller
+
+      - name: Build AppImage (standalone)
+        run: |
+          pyinstaller --onefile --name "aihub-for-linux" \
+                      --add-data "README.md:." \
+                      app.py
+          mv dist/aihub-for-linux dist/aihub-for-linux-x86_64.AppImage 2>/dev/null || true
 
       - name: Build DEB package
         run: |
           chmod +x dist/build-deb.sh
           dist/build-deb.sh
-          ls -lh dist/*.deb
 
-      - name: Upload DEB artifact
+      - name: Build RPM package
+        run: |
+          git archive --format=tar.gz --prefix=aihub-for-linux-0.2.0/ -o dist/aihub-for-linux-0.2.0.tar.gz HEAD
+          chmod +x dist/build-rpm.sh
+          dist/build-rpm.sh
+
+      - name: List artifacts
+        run: ls -lh dist/
+
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: deb-package
-          path: dist/*.deb
+          name: linux-packages
+          path: |
+            dist/*.deb
+            dist/*.rpm
+            dist/*.AppImage
           if-no-files-found: error
 
   release:

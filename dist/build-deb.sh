@@ -3,7 +3,7 @@ set -e
 DIR="$(dirname "$(readlink -f "$0")")"
 cd "$DIR/.."
 PKG="aihub-for-linux"
-VER="0.2.1"
+VER="0.2.0"
 
 rm -rf "/tmp/${PKG}-${VER}"
 mkdir -p "/tmp/${PKG}-${VER}/DEBIAN"
