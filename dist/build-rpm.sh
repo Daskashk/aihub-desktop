@@ -7,7 +7,7 @@ VER="0.2.0"
 
 rpmbuild -bb --nodeps \
   --define "_topdir $(pwd)/rpmbuild" \
-  --define "_sourcedir $(pwd)" \
+  --define "_sourcedir $(pwd)/dist" \
   --define "_rpmdir $(pwd)/dist" \
   dist/aihub-for-linux.spec
 
