@@ -41,7 +41,6 @@ jobs:
 
       - name: Build RPM package
         run: |
-          git archive --format=tar.gz --prefix=aihub-for-linux-0.2.0/ -o dist/aihub-for-linux-0.2.0.tar.gz HEAD
           chmod +x dist/build-rpm.sh
           dist/build-rpm.sh
 
