@@ -1,7 +1,7 @@
 %global __requires_exclude ^(python-gi|python3-gi|gir1\\.2-gtk|gir1\\.2-webkit2)
 
 Name:      aihub-for-linux
-Version:   0.1.0
+Version:   0.2.1
 Release:   1%{?dist}
 Summary:   Unify 65+ AI assistants in a single native Linux desktop app
 
