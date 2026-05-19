@@ -11,9 +11,6 @@ Source0:   %{name}-%{version}.tar.gz
 
 BuildArch: noarch
 
-BuildRequires: python3-devel
-BuildRequires: python3-gobject-base
-
 Requires:  python3
 Requires:  python3-gobject
 Requires:  python3-gi-cairo

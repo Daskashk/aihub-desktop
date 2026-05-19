@@ -5,7 +5,7 @@ cd "$DIR/.."
 PKG="aihub-for-linux"
 VER="0.2.0"
 
-rpmbuild -bb \
+rpmbuild -bb --nodeps \
   --define "_topdir $(pwd)/rpmbuild" \
   --define "_sourcedir $(pwd)" \
   --define "_rpmdir $(pwd)/dist" \
