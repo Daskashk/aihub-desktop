@@ -51,9 +51,17 @@ Categories=Utility;Network;AI;
 Terminal=false
 DESKTOP_EOF
 
+mkdir -p %{buildroot}%{_datadir}/icons/hicolor/512x512/apps
+install -m 644 icon.png %{buildroot}%{_datadir}/icons/hicolor/512x512/apps/aihub-for-linux.png
+
+mkdir -p %{buildroot}%{_datadir}/pixmaps
+install -m 644 icon.png %{buildroot}%{_datadir}/pixmaps/aihub-for-linux.png
+
 %files
 %{_bindir}/aihub-for-linux
 %{_datadir}/applications/aihub-for-linux.desktop
+%{_datadir}/icons/hicolor/512x512/apps/aihub-for-linux.png
+%{_datadir}/pixmaps/aihub-for-linux.png
 
 %changelog
 * Mon May 18 2026 Daskashk <daskashk@users.noreply.github.com> - 0.1.0-1

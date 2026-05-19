@@ -13,6 +13,12 @@ mkdir -p "/tmp/${PKG}-${VER}/usr/share/doc/${PKG}"
 
 install -m 755 app.py "/tmp/${PKG}-${VER}/usr/bin/${PKG}"
 
+# Icon
+mkdir -p "/tmp/${PKG}-${VER}/usr/share/icons/hicolor/512x512/apps"
+install -m 644 icon.png "/tmp/${PKG}-${VER}/usr/share/icons/hicolor/512x512/apps/${PKG}.png"
+mkdir -p "/tmp/${PKG}-${VER}/usr/share/pixmaps"
+install -m 644 icon.png "/tmp/${PKG}-${VER}/usr/share/pixmaps/${PKG}.png"
+
 cat > "/tmp/${PKG}-${VER}/usr/share/applications/${PKG}.desktop" << DESKTOP_EOF
 [Desktop Entry]
 Type=Application

@@ -958,7 +958,7 @@ class AIHubApp(Gtk.Application):
         ab.set_margin_start(12); ab.set_margin_end(12); ab.set_margin_top(12)
 
         # App icon
-        icon_path = os.path.join(BASE, 'ui', 'assets', 'icon.png')
+        icon_path = os.path.join(BASE, 'icon.png')
         if os.path.exists(icon_path):
             icon_pix = GdkPixbuf.Pixbuf.new_from_file_at_scale(icon_path, 48, 48, True)
             icon_img = Gtk.Image.new_from_pixbuf(icon_pix)
