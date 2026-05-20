@@ -67,6 +67,7 @@ SPEC_EOF
 rpmbuild -bb --nodeps \
   --define "_topdir $(pwd)/rpmbuild" \
   --define "_rpmdir $(pwd)/dist" \
+  --define "_rpmfilename %{NAME}-%{VERSION}-%{RELEASE}.%{ARCH}.rpm" \
   --define "_builddir $(pwd)/rpmbuild/BUILD" \
   --define "_specdir $(pwd)/rpmbuild/SPECS" \
   --define "_sourcedir $(pwd)/rpmbuild/SOURCES" \
